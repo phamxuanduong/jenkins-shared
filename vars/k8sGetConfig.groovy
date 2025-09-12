@@ -12,24 +12,23 @@ def call(Map args = [:]) {
 
   items.each { String key, String destPath ->
     if (!destPath) error "k8sGetConfig: path rỗng cho key '${key}'"
-
     sh(
       label: "k8sGetConfig: ${cm}/${key} → ${destPath}",
       script: """#!/bin/bash
         set -Eeuo pipefail
-
         echo "[INFO] Fetching key='${key}' from ConfigMap='${cm}' (ns='${ns}')"
         dir=\$(dirname '${destPath}')
         [ "\$dir" = "." ] || mkdir -p "\$dir"
-
         tmp=\$(mktemp)
-        # Thiếu key -> kubectl trả lỗi (strict)
-        kubectl get configmap '${cm}' -n '${ns}' \\
-          --allow-missing-template-keys=false \\
-          -o go-template='{{index .data "${key}"}}' > "\$tmp"
 
-        if [ ! -s "\$tmp" ]; then
-          echo "[ERROR] Key '${key}' tồn tại nhưng nội dung rỗng"
+        # JSONPath: dùng bracket + dấu nháy để hỗ trợ key có dấu chấm
+        kubectl get configmap '${cm}' -n '${ns}' \
+          --allow-missing-template-keys=false \
+          -o jsonpath='{.data["${key}"]}' > "\$tmp"
+
+        # Nếu rỗng hoặc bị in literal "<no value>" thì fail
+        if [ ! -s "\$tmp" ] || grep -qx "<no value>" "\$tmp"; then
+          echo "[ERROR] Key '${key}' thiếu hoặc rỗng"
           exit 1
         fi
 
