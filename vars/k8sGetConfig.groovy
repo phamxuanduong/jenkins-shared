@@ -1,3 +1,4 @@
+// vars/k8sGetConfig.groovy
 def call(Map args = [:]) {
   if (!args.namespace) error 'k8sGetConfig: thiếu "namespace"'
   if (!args.configmap) error 'k8sGetConfig: thiếu "configmap"'
@@ -7,16 +8,35 @@ def call(Map args = [:]) {
 
   String ns = args.namespace
   String cm = args.configmap
-  Map items = args.items  // ví dụ: ['Dockerfile':'build/images/base/Dockerfile', '.env':'deploy/dev/.env']
+  Map items = args.items
 
   items.each { String key, String destPath ->
     if (!destPath) error "k8sGetConfig: path rỗng cho key '${key}'"
-    sh """#!/bin/bash -eu
-      dir=\$(dirname '${destPath}')
-      [ "\$dir" = "." ] || mkdir -p "\$dir"
-      kubectl get configmap '${cm}' -n '${ns}' \
-        --allow-missing-template-keys=false \
-        -o go-template='{{index .data "${key}"}}' > '${destPath}'
-    """
+
+    sh(
+      label: "k8sGetConfig: ${cm}/${key} → ${destPath}",
+      script: """#!/bin/bash
+        set -Eeuo pipefail
+
+        echo "[INFO] Fetching key='${key}' from ConfigMap='${cm}' (ns='${ns}')"
+        dir=\$(dirname '${destPath}')
+        [ "\$dir" = "." ] || mkdir -p "\$dir"
+
+        tmp=\$(mktemp)
+        # Thiếu key -> kubectl trả lỗi (strict)
+        kubectl get configmap '${cm}' -n '${ns}' \\
+          --allow-missing-template-keys=false \\
+          -o go-template='{{index .data "${key}"}}' > "\$tmp"
+
+        if [ ! -s "\$tmp" ]; then
+          echo "[ERROR] Key '${key}' tồn tại nhưng nội dung rỗng"
+          exit 1
+        fi
+
+        bytes=\$(wc -c < "\$tmp" | tr -d ' ')
+        mv -f "\$tmp" '${destPath}'
+        echo "[OK] Wrote '${destPath}' (\${bytes} bytes)"
+      """
+    )
   }
 }
