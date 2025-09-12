@@ -1,9 +1,8 @@
 def call(Map args = [:]) {
   if (!args.namespace) error 'k8sGetConfig: thiếu "namespace"'
   if (!args.configmap) error 'k8sGetConfig: thiếu "configmap"'
-  if (!(args.items instanceof Map) || args.items.isEmpty()) {
+  if (!(args.items instanceof Map) || args.items.isEmpty())
     error 'k8sGetConfig: thiếu "items" (Map: key-trong-ConfigMap -> đường-dẫn-file-đích)'
-  }
 
   String ns = args.namespace
   String cm = args.configmap
@@ -11,12 +10,14 @@ def call(Map args = [:]) {
 
   items.each { String key, String destPath ->
     if (!destPath) error "k8sGetConfig: path rỗng cho key '${key}'"
-    sh """#!/bin/bash -eu
+    sh """#!/bin/bash -euo pipefail
       dir=\$(dirname '${destPath}')
       [ "\$dir" = "." ] || mkdir -p "\$dir"
+
+      # JSONPath + strict: thiếu key -> kubectl trả lỗi (exit != 0)
       kubectl get configmap '${cm}' -n '${ns}' \
         --allow-missing-template-keys=false \
-        -o go-template='{{index .data "${key}"}}' > '${destPath}'
+        -o jsonpath='{.data["${key}"]}' > '${destPath}'
     """
   }
 }
