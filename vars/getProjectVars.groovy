@@ -18,6 +18,23 @@ def call(Map config = [:]) {
   // Calculate final repo name for consistent use
   def finalRepoName = config.repoName ?: repoName ?: 'unknown-repo'
 
+  // Determine registry based on branch name
+  def registry = config.registry
+  if (!registry) {
+    def lowerBranch = branchName.toLowerCase()
+    if (lowerBranch.contains('dev') || lowerBranch.contains('beta')) {
+      registry = env.REGISTRY_BETA ?: '172.16.3.0/mtw'
+    } else if (lowerBranch.contains('staging')) {
+      registry = env.REGISTRY_STAGING ?: '172.16.3.0/mtw'
+    } else if (lowerBranch.contains('main') || lowerBranch.contains('master') ||
+               lowerBranch.contains('prod') || lowerBranch.contains('production')) {
+      registry = env.REGISTRY_PROD ?: '172.16.3.0/mtw'
+    } else {
+      // Default to beta for unknown branches
+      registry = env.REGISTRY_BETA ?: '172.16.3.0/mtw'
+    }
+  }
+
   // Set defaults and allow overrides
   def vars = [
     REPO_NAME: finalRepoName,
@@ -25,7 +42,7 @@ def call(Map config = [:]) {
     NAMESPACE: config.namespace ?: finalRepoName,
     DEPLOYMENT: config.deployment ?: "${finalRepoName}-${branchName}",
     APP_NAME: config.appName ?: finalRepoName,
-    REGISTRY: config.registry ?: env.DOCKER_REGISTRY ?: '172.16.3.0/mtw',
+    REGISTRY: registry,
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
   ]
 
@@ -37,7 +54,7 @@ def call(Map config = [:]) {
   NAMESPACE:    ${vars.NAMESPACE}
   DEPLOYMENT:   ${vars.DEPLOYMENT}
   APP_NAME:     ${vars.APP_NAME}
-  REGISTRY:     ${vars.REGISTRY}
+  REGISTRY:     ${vars.REGISTRY} (auto-selected based on branch)
   COMMIT_HASH:  ${vars.COMMIT_HASH}
 """
 

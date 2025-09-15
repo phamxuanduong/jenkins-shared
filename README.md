@@ -126,7 +126,11 @@ Lấy các biến dự án tự động từ Git và environment, có thể over
 - NAMESPACE = REPO_NAME (ví dụ: `hyra-one-base-api`)
 - DEPLOYMENT = REPO_NAME-REPO_BRANCH (ví dụ: `hyra-one-base-api-main`)
 - APP_NAME = REPO_NAME
-- REGISTRY từ Jenkins environment variable `DOCKER_REGISTRY`
+- REGISTRY tự động chọn theo branch:
+  - Branch chứa `dev`, `beta` → `env.REGISTRY_BETA`
+  - Branch chứa `staging` → `env.REGISTRY_STAGING`
+  - Branch chứa `main`, `master`, `prod`, `production` → `env.REGISTRY_PROD`
+  - Các branch khác → `env.REGISTRY_BETA` (mặc định)
 
 **Trả về:** Map chứa các biến: REPO_NAME, REPO_BRANCH, NAMESPACE, DEPLOYMENT, APP_NAME, REGISTRY, COMMIT_HASH
 
@@ -138,7 +142,10 @@ script {
     // Tự động từ Git:
     // NAMESPACE = hyra-one-base-api (repo name)
     // DEPLOYMENT = hyra-one-base-api-main (repo-branch)
-    // REGISTRY từ Jenkins env.DOCKER_REGISTRY
+    // REGISTRY tự động chọn:
+    //   - main branch → env.REGISTRY_PROD
+    //   - develop branch → env.REGISTRY_BETA
+    //   - staging branch → env.REGISTRY_STAGING
 
     dockerBuildPush(
         image: "${vars.REGISTRY}/${vars.APP_NAME}",
@@ -206,9 +213,8 @@ pipeline {
             steps {
                 script {
                     env.PROJECT_VARS = getProjectVars()
-                    // Tự động:
-                    // NAMESPACE = hyra-one-base-api (repo name)
-                    // DEPLOYMENT = hyra-one-base-api-main (repo-branch)
+                    // Tự động chọn registry theo branch:
+                    // main → REGISTRY_PROD, develop/beta → REGISTRY_BETA, staging → REGISTRY_STAGING
                 }
             }
         }
@@ -279,10 +285,27 @@ pipeline {
 }
 ```
 
+## Setup Jenkins Environment Variables
+
+Cần thiết lập các biến môi trường trong Jenkins:
+
+```bash
+# Jenkins Global Environment Variables
+REGISTRY_BETA=registry-beta.company.com
+REGISTRY_STAGING=registry-staging.company.com
+REGISTRY_PROD=registry-prod.company.com
+```
+
 ## Workflow tiêu chuẩn
 
 1. **Build**: Xây dựng Docker image với commit hash làm tag
-2. **Push**: Đẩy image lên private registry
+2. **Push**: Đẩy image lên registry phù hợp với branch
 3. **Deploy**: Cập nhật Kubernetes deployment với image mới
+
+**Registry Selection Logic:**
+- `develop`, `dev-*`, `beta`, `beta-*` → `REGISTRY_BETA`
+- `staging`, `staging-*` → `REGISTRY_STAGING`
+- `main`, `master`, `prod`, `production` → `REGISTRY_PROD`
+- Các branch khác → `REGISTRY_BETA` (fallback)
 
 Tất cả các hàm đều có error handling và logging chi tiết để dễ debug.
