@@ -201,8 +201,40 @@ script {
 }
 ```
 
+### cicdPipeline
+Thực hiện toàn bộ quy trình CI/CD trong một hàm duy nhất.
+
+**Tham số (tất cả tùy chọn):**
+- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
+- `getConfigStage`: Bật/tắt stage lấy ConfigMap (mặc định: true)
+- `buildStage`: Bật/tắt stage build & push (mặc định: true)
+- `deployStage`: Bật/tắt stage deploy (mặc định: true)
+- `getConfigStageName`: Tên stage lấy config (mặc định: 'K8s get Configmap')
+- `buildStageName`: Tên stage build (mặc định: 'Build & Push')
+- `deployStageName`: Tên stage deploy (mặc định: 'Deploy')
+
+**Quy trình tự động:**
+1. **K8s get Configmap**: Lấy Dockerfile và .env từ ConfigMap theo branch
+2. **Build & Push**: Build Docker image và push lên registry
+3. **Deploy**: Cập nhật Kubernetes deployment với image mới
+
+**Ví dụ:**
+```groovy
+// Hoàn toàn tự động - thực hiện toàn bộ CI/CD
+cicdPipeline()
+
+// Chỉ build và deploy (bỏ qua lấy config)
+cicdPipeline(getConfigStage: false)
+
+// Custom stage names
+cicdPipeline(
+    buildStageName: 'Docker Build & Push',
+    deployStageName: 'Kubernetes Deploy'
+)
+```
+
 ### deployPipeline
-Pipeline hoàn chỉnh với cấu hình tập trung.
+Pipeline hoàn chỉnh với cấu hình tập trung (legacy).
 
 **Tham số:**
 - `appName` (bắt buộc): Tên ứng dụng
@@ -229,7 +261,26 @@ deployPipeline([
 
 ## Jenkinsfile hoàn chỉnh
 
-### Cách 1: Sử dụng deployPipeline (Đơn giản)
+### Cách 1: Sử dụng cicdPipeline (Siêu đơn giản)
+```groovy
+@Library('jenkins-shared@main') _
+
+pipeline {
+  agent { label 'beta' }
+
+  stages {
+    stage('CI/CD') {
+      steps {
+        script {
+          cicdPipeline()
+        }
+      }
+    }
+  }
+}
+```
+
+### Cách 2: Sử dụng deployPipeline (Legacy)
 ```groovy
 @Library('jenkins-shared') _
 
@@ -241,7 +292,7 @@ deployPipeline([
 ])
 ```
 
-### Cách 2: Sử dụng getProjectVars (Linh hoạt)
+### Cách 3: Sử dụng getProjectVars (Linh hoạt)
 ```groovy
 @Library('jenkins-shared@main') _
 
@@ -286,7 +337,7 @@ pipeline {
 }
 ```
 
-### Cách 3: Hoàn toàn tự động (Đơn giản nhất)
+### Cách 4: Hoàn toàn tự động (Đơn giản nhất)
 ```groovy
 @Library('jenkins-shared@main') _
 
