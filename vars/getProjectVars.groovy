@@ -12,8 +12,9 @@ def call(Map config = [:]) {
     }
   }
 
-  // Calculate branch name
+  // Calculate branch name and sanitize for K8s naming
   def branchName = config.repoBranch ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME ?: 'main'
+  def sanitizedBranch = branchName.replaceAll('/', '-').replaceAll('[^a-zA-Z0-9-]', '-').toLowerCase()
 
   // Calculate final repo name for consistent use
   def finalRepoName = config.repoName ?: repoName ?: 'unknown-repo'
@@ -39,8 +40,9 @@ def call(Map config = [:]) {
   def vars = [
     REPO_NAME: finalRepoName,
     REPO_BRANCH: branchName,
+    SANITIZED_BRANCH: sanitizedBranch,
     NAMESPACE: config.namespace ?: finalRepoName,
-    DEPLOYMENT: config.deployment ?: "${finalRepoName}-${branchName}",
+    DEPLOYMENT: config.deployment ?: "${finalRepoName}-${sanitizedBranch}",
     APP_NAME: config.appName ?: finalRepoName,
     REGISTRY: registry,
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
@@ -49,13 +51,14 @@ def call(Map config = [:]) {
   // Log all variables for debugging
   echo """
 [INFO] Project Variables:
-  REPO_NAME:    ${vars.REPO_NAME}
-  REPO_BRANCH:  ${vars.REPO_BRANCH}
-  NAMESPACE:    ${vars.NAMESPACE}
-  DEPLOYMENT:   ${vars.DEPLOYMENT}
-  APP_NAME:     ${vars.APP_NAME}
-  REGISTRY:     ${vars.REGISTRY} (auto-selected based on branch)
-  COMMIT_HASH:  ${vars.COMMIT_HASH}
+  REPO_NAME:     ${vars.REPO_NAME}
+  REPO_BRANCH:   ${vars.REPO_BRANCH}
+  SANITIZED_BRANCH: ${sanitizedBranch}
+  NAMESPACE:     ${vars.NAMESPACE}
+  DEPLOYMENT:    ${vars.DEPLOYMENT}
+  APP_NAME:      ${vars.APP_NAME}
+  REGISTRY:      ${vars.REGISTRY} (auto-selected based on branch)
+  COMMIT_HASH:   ${vars.COMMIT_HASH}
 """
 
   return vars

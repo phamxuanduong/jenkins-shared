@@ -1,13 +1,15 @@
 def call(Map args = [:]) {
-  if (!args.namespace) error 'k8sGetConfig: thiếu "namespace"'
-  if (!args.configmap) error 'k8sGetConfig: thiếu "configmap"'
-  if (!(args.items instanceof Map) || args.items.isEmpty()) {
-    error 'k8sGetConfig: thiếu "items" (Map: key-trong-ConfigMap -> đường-dẫn-file-đích)'
-  }
+  // Get project vars if not provided
+  def vars = args.vars ?: getProjectVars()
 
-  String ns = args.namespace
-  String cm = args.configmap
-  Map items = args.items   // ví dụ: ['Dockerfile':'build/images/base/Dockerfile', '.env':'deploy/dev/.env']
+  String ns = args.namespace ?: vars.NAMESPACE
+  String cm = args.configmap ?: vars.SANITIZED_BRANCH
+
+  // Default items if not specified
+  Map items = args.items ?: [
+    'Dockerfile': 'Dockerfile',
+    '.env': '.env'
+  ]
 
   items.each { String key, String destPath ->
     if (!destPath) error "k8sGetConfig: path rỗng cho key '${key}'"
@@ -23,18 +25,19 @@ def call(Map args = [:]) {
 
         tmp=\$(mktemp)
 
-        # go-template: index hỗ trợ key có dấu chấm; strict để thiếu key -> lỗi
+        # Check if key exists in configmap first
         if ! kubectl get configmap '${cm}' -n '${ns}' \\
-             --allow-missing-template-keys=false \\
-             -o go-template='{{index .data "${key}"}}' > "\$tmp"; then
-          echo "[ERROR] Missing key '${key}' in ConfigMap '${cm}'" >&2
-          exit 1
+             -o jsonpath="{.data.${key}}" > "\$tmp" 2>/dev/null; then
+          echo "[WARN] ConfigMap '${cm}' not found or key '${key}' missing, skipping..." >&2
+          rm -f "\$tmp"
+          exit 0
         fi
 
-        # Guard: Go template có thể in literal "<no value>" khi key thiếu; hoặc rỗng
-        if [ ! -s "\$tmp" ] || grep -qxF '<no value>' "\$tmp"; then
-          echo "[ERROR] Key '${key}' thiếu hoặc rỗng (got '<no value>'/empty)" >&2
-          exit 1
+        # Check if the key actually has data
+        if [ ! -s "\$tmp" ]; then
+          echo "[WARN] Key '${key}' is empty in ConfigMap '${cm}', skipping..." >&2
+          rm -f "\$tmp"
+          exit 0
         fi
 
         bytes=\$(wc -c < "\$tmp" | tr -d ' ')

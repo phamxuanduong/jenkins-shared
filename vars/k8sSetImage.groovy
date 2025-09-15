@@ -1,13 +1,11 @@
 def call(Map args = [:]) {
-  if (!args.deployment) error 'k8sSetImage: thiếu "deployment"'
-  if (!args.image) error 'k8sSetImage: thiếu "image"'
-  if (!args.tag) error 'k8sSetImage: thiếu "tag"'
-  if (!args.namespace) error 'k8sSetImage: thiếu "namespace"'
+  // Get project vars if not provided
+  def vars = args.vars ?: getProjectVars()
 
-  String deployment = args.deployment
-  String image = args.image
-  String tag = args.tag
-  String namespace = args.namespace
+  String deployment = args.deployment ?: vars.DEPLOYMENT
+  String image = args.image ?: "${vars.REGISTRY}/${vars.APP_NAME}"
+  String tag = args.tag ?: vars.COMMIT_HASH
+  String namespace = args.namespace ?: vars.NAMESPACE
   String container = args.container ?: '*'
 
   sh(

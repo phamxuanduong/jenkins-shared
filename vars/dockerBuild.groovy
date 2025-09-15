@@ -1,9 +1,9 @@
 def call(Map args = [:]) {
-  if (!args.image) error 'dockerBuild: thiếu "image"'
-  if (!args.tag) error 'dockerBuild: thiếu "tag"'
+  // Get project vars if not provided
+  def vars = args.vars ?: getProjectVars()
 
-  String image = args.image
-  String tag = args.tag
+  String image = args.image ?: "${vars.REGISTRY}/${vars.APP_NAME}"
+  String tag = args.tag ?: vars.COMMIT_HASH
   String dockerfile = args.dockerfile ?: 'Dockerfile'
   String context = args.context ?: '.'
 

@@ -20,72 +20,97 @@ Thư viện chung Jenkins cung cấp các hàm tiện ích cho CI/CD pipeline.
 ### dockerBuild
 Xây dựng Docker image.
 
-**Tham số:**
-- `image` (bắt buộc): Tên image
-- `tag` (bắt buộc): Tag cho image
-- `dockerfile` (tùy chọn): Đường dẫn Dockerfile (mặc định: 'Dockerfile')
-- `context` (tùy chọn): Build context (mặc định: '.')
+**Tham số (tất cả tùy chọn):**
+- `image`: Tên image (mặc định: tự động từ `getProjectVars()`)
+- `tag`: Tag cho image (mặc định: tự động từ commit hash)
+- `dockerfile`: Đường dẫn Dockerfile (mặc định: 'Dockerfile')
+- `context`: Build context (mặc định: '.')
+- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
 
 **Ví dụ:**
 ```groovy
+// Hoàn toàn tự động
+dockerBuild()
+
+// Chỉ định dockerfile khác
+dockerBuild(dockerfile: 'docker/Dockerfile')
+
+// Custom image và tag
 dockerBuild(
     image: '172.16.3.0/mtw/my-app',
-    tag: env.GIT_COMMIT?.take(7),
-    dockerfile: 'docker/Dockerfile',
-    context: '.'
+    tag: 'v1.0.0'
 )
 ```
 
 ### dockerPush
 Đẩy Docker image lên registry.
 
-**Tham số:**
-- `image` (bắt buộc): Tên image
-- `tag` (bắt buộc): Tag của image
+**Tham số (tất cả tùy chọn):**
+- `image`: Tên image (mặc định: tự động từ `getProjectVars()`)
+- `tag`: Tag của image (mặc định: tự động từ commit hash)
+- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
 
 **Ví dụ:**
 ```groovy
+// Hoàn toàn tự động
+dockerPush()
+
+// Custom image và tag
 dockerPush(
     image: '172.16.3.0/mtw/my-app',
-    tag: env.GIT_COMMIT?.take(7)
+    tag: 'v1.0.0'
 )
 ```
 
 ### dockerBuildPush
 Xây dựng và đẩy Docker image trong một bước.
 
-**Tham số:**
-- `image` (bắt buộc): Tên image
-- `tag` (bắt buộc): Tag cho image
-- `dockerfile` (tùy chọn): Đường dẫn Dockerfile (mặc định: 'Dockerfile')
-- `context` (tùy chọn): Build context (mặc định: '.')
+**Tham số (tất cả tùy chọn):**
+- `image`: Tên image (mặc định: tự động từ `getProjectVars()`)
+- `tag`: Tag cho image (mặc định: tự động từ commit hash)
+- `dockerfile`: Đường dẫn Dockerfile (mặc định: 'Dockerfile')
+- `context`: Build context (mặc định: '.')
+- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
 
 **Ví dụ:**
 ```groovy
+// Hoàn toàn tự động
+dockerBuildPush()
+
+// Chỉ định dockerfile khác
+dockerBuildPush(dockerfile: 'docker/Dockerfile')
+
+// Custom image và tag
 dockerBuildPush(
     image: '172.16.3.0/mtw/my-app',
-    tag: env.GIT_COMMIT?.take(7),
-    dockerfile: 'docker/Dockerfile',
-    context: '.'
+    tag: 'v1.0.0'
 )
 ```
 
 ### k8sSetImage
 Cập nhật image cho Kubernetes deployment.
 
-**Tham số:**
-- `deployment` (bắt buộc): Tên deployment
-- `image` (bắt buộc): Tên image mới
-- `tag` (bắt buộc): Tag của image
-- `namespace` (bắt buộc): Kubernetes namespace
-- `container` (tùy chọn): Tên container cụ thể (mặc định: '*' - tất cả containers)
+**Tham số (tất cả tùy chọn):**
+- `deployment`: Tên deployment (mặc định: tự động từ `getProjectVars()`)
+- `image`: Tên image mới (mặc định: tự động từ `getProjectVars()`)
+- `tag`: Tag của image (mặc định: tự động từ commit hash)
+- `namespace`: Kubernetes namespace (mặc định: tự động từ repo name)
+- `container`: Tên container cụ thể (mặc định: '*' - tất cả containers)
+- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
 
 **Ví dụ:**
 ```groovy
+// Hoàn toàn tự động
+k8sSetImage()
+
+// Custom deployment name
+k8sSetImage(deployment: 'my-custom-deployment')
+
+// Đầy đủ custom
 k8sSetImage(
     deployment: 'hyra-one-base-api-beta-api',
     image: '172.16.3.0/mtw/hyra-one-base-api-beta-api',
-    tag: env.GIT_COMMIT?.take(7),
+    tag: 'v1.0.0',
     namespace: 'hyra-one-base-api'
 )
 ```
@@ -93,13 +118,28 @@ k8sSetImage(
 ### k8sGetConfig
 Lấy dữ liệu từ Kubernetes ConfigMap và lưu vào file.
 
-**Tham số:**
-- `namespace` (bắt buộc): Kubernetes namespace
-- `configmap` (bắt buộc): Tên ConfigMap
-- `items` (bắt buộc): Map các key và đường dẫn file đích
+**Tham số (tất cả tùy chọn):**
+- `namespace`: Kubernetes namespace (mặc định: tự động từ `getProjectVars().NAMESPACE`)
+- `configmap`: Tên ConfigMap (mặc định: tự động từ `getProjectVars().SANITIZED_BRANCH`)
+- `items`: Map các key và đường dẫn file đích (mặc định: `['Dockerfile': 'Dockerfile', '.env': '.env']`)
+- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
+
+**Mặc định tự động:**
+- `namespace` = REPO_NAME (từ Git URL)
+- `configmap` = SANITIZED_BRANCH (branch name được sanitize cho K8s)
+- Luôn lấy `Dockerfile` về thư mục hiện tại
+- Lấy `.env` về thư mục hiện tại (nếu có)
+- Tự động bỏ qua nếu key không tồn tại hoặc rỗng
 
 **Ví dụ:**
 ```groovy
+// Hoàn toàn tự động - lấy từ branch hiện tại
+k8sGetConfig()
+
+// Chỉ định configmap khác
+k8sGetConfig(configmap: 'prod')
+
+// Custom với đường dẫn khác
 k8sGetConfig(
     namespace: 'my-namespace',
     configmap: 'app-config',
@@ -132,7 +172,7 @@ Lấy các biến dự án tự động từ Git và environment, có thể over
   - Branch chứa `main`, `master`, `prod`, `production` → `env.REGISTRY_PROD`
   - Các branch khác → `env.REGISTRY_BETA` (mặc định)
 
-**Trả về:** Map chứa các biến: REPO_NAME, REPO_BRANCH, NAMESPACE, DEPLOYMENT, APP_NAME, REGISTRY, COMMIT_HASH
+**Trả về:** Map chứa các biến: REPO_NAME, REPO_BRANCH, SANITIZED_BRANCH, NAMESPACE, DEPLOYMENT, APP_NAME, REGISTRY, COMMIT_HASH
 
 **Ví dụ:**
 ```groovy
@@ -203,85 +243,81 @@ deployPipeline([
 
 ### Cách 2: Sử dụng getProjectVars (Linh hoạt)
 ```groovy
-@Library('jenkins-shared') _
+@Library('jenkins-shared@main') _
+
+def VARS
 
 pipeline {
-    agent any
+  agent { label 'beta' }
 
-    stages {
-        stage('Setup') {
-            steps {
-                script {
-                    env.PROJECT_VARS = getProjectVars()
-                    // Tự động chọn registry theo branch:
-                    // main → REGISTRY_PROD, develop/beta → REGISTRY_BETA, staging → REGISTRY_STAGING
-                }
-            }
+  stages {
+    stage('Setup') {
+      steps {
+        script {
+          VARS = getProjectVars()
         }
-
-        stage('Build & Push') {
-            steps {
-                script {
-                    def vars = env.PROJECT_VARS
-                    dockerBuildPush(
-                        image: "${vars.REGISTRY}/${vars.APP_NAME}",
-                        tag: vars.COMMIT_HASH
-                    )
-                }
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                script {
-                    def vars = env.PROJECT_VARS
-                    k8sSetImage(
-                        deployment: vars.DEPLOYMENT,
-                        image: "${vars.REGISTRY}/${vars.APP_NAME}",
-                        tag: vars.COMMIT_HASH,
-                        namespace: vars.NAMESPACE
-                    )
-                }
-            }
-        }
+      }
     }
+
+    stage('K8s get Configmap') {
+      steps {
+        script {
+          k8sGetConfig(vars: VARS)
+        }
+      }
+    }
+
+    stage('Build & Push') {
+      steps {
+        script {
+          dockerBuildPush(vars: VARS)
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        script {
+          k8sSetImage(vars: VARS)
+        }
+      }
+    }
+  }
 }
 ```
 
-### Cách 3: Jenkinsfile truyền thống
+### Cách 3: Hoàn toàn tự động (Đơn giản nhất)
 ```groovy
-@Library('jenkins-shared') _
+@Library('jenkins-shared@main') _
 
 pipeline {
-    agent any
+  agent { label 'beta' }
 
-    environment {
-        REGISTRY = '172.16.3.0/mtw'
-        APP_NAME = 'hyra-one-base-api'
-        COMMIT_HASH = "${env.GIT_COMMIT?.take(7)}"
+  stages {
+    stage('K8s get Configmap') {
+      steps {
+        script {
+          k8sGetConfig()
+        }
+      }
     }
 
-    stages {
-        stage('Build & Push') {
-            steps {
-                dockerBuildPush(
-                    image: "${REGISTRY}/${APP_NAME}",
-                    tag: "${COMMIT_HASH}"
-                )
-            }
+    stage('Build & Push') {
+      steps {
+        script {
+          dockerBuildPush()
         }
-
-        stage('Deploy') {
-            steps {
-                k8sSetImage(
-                    deployment: "${APP_NAME}-beta-api",
-                    image: "${REGISTRY}/${APP_NAME}-beta-api",
-                    tag: "${COMMIT_HASH}",
-                    namespace: "${APP_NAME}"
-                )
-            }
-        }
+      }
     }
+
+    stage('Deploy') {
+      steps {
+        script {
+          k8sSetImage()
+        }
+      }
+    }
+  }
 }
 ```
 
