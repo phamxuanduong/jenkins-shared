@@ -110,6 +110,43 @@ k8sGetConfig(
 )
 ```
 
+### getProjectVars
+Lấy các biến dự án tự động từ Git và environment, có thể override.
+
+**Tham số (tất cả tùy chọn):**
+- `repoName`: Tên repository (mặc định: tự động từ GIT_URL)
+- `repoBranch`: Tên branch (mặc định: tự động từ GIT_BRANCH)
+- `namespace`: Kubernetes namespace (mặc định: repoName)
+- `deployment`: Tên deployment (mặc định: "{repoName}-deployment")
+- `appName`: Tên ứng dụng (mặc định: repoName)
+- `registry`: Docker registry (mặc định: '172.16.3.0/mtw')
+- `commitHash`: Git commit hash (mặc định: env.GIT_COMMIT?.take(7))
+
+**Trả về:** Map chứa các biến: REPO_NAME, REPO_BRANCH, NAMESPACE, DEPLOYMENT, APP_NAME, REGISTRY, COMMIT_HASH
+
+**Ví dụ:**
+```groovy
+script {
+    def vars = getProjectVars([
+        registry: 'my-registry.com',
+        namespace: 'production'
+    ])
+
+    // Sử dụng biến trong các step khác
+    dockerBuildPush(
+        image: "${vars.REGISTRY}/${vars.APP_NAME}",
+        tag: vars.COMMIT_HASH
+    )
+
+    k8sSetImage(
+        deployment: vars.DEPLOYMENT,
+        image: "${vars.REGISTRY}/${vars.APP_NAME}",
+        tag: vars.COMMIT_HASH,
+        namespace: vars.NAMESPACE
+    )
+}
+```
+
 ### deployPipeline
 Pipeline hoàn chỉnh với cấu hình tập trung.
 
@@ -150,7 +187,55 @@ deployPipeline([
 ])
 ```
 
-### Cách 2: Jenkinsfile truyền thống
+### Cách 2: Sử dụng getProjectVars (Linh hoạt)
+```groovy
+@Library('jenkins-shared') _
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Setup') {
+            steps {
+                script {
+                    env.PROJECT_VARS = getProjectVars([
+                        registry: '172.16.3.0/mtw',
+                        deployment: 'hyra-one-base-api-beta-api'
+                    ])
+                }
+            }
+        }
+
+        stage('Build & Push') {
+            steps {
+                script {
+                    def vars = env.PROJECT_VARS
+                    dockerBuildPush(
+                        image: "${vars.REGISTRY}/${vars.APP_NAME}",
+                        tag: vars.COMMIT_HASH
+                    )
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    def vars = env.PROJECT_VARS
+                    k8sSetImage(
+                        deployment: vars.DEPLOYMENT,
+                        image: "${vars.REGISTRY}/${vars.APP_NAME}",
+                        tag: vars.COMMIT_HASH,
+                        namespace: vars.NAMESPACE
+                    )
+                }
+            }
+        }
+    }
+}
+```
+
+### Cách 3: Jenkinsfile truyền thống
 ```groovy
 @Library('jenkins-shared') _
 
