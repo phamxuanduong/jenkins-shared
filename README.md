@@ -117,22 +117,29 @@ Lấy các biến dự án tự động từ Git và environment, có thể over
 - `repoName`: Tên repository (mặc định: tự động từ GIT_URL)
 - `repoBranch`: Tên branch (mặc định: tự động từ GIT_BRANCH)
 - `namespace`: Kubernetes namespace (mặc định: repoName)
-- `deployment`: Tên deployment (mặc định: "{repoName}-deployment")
+- `deployment`: Tên deployment (mặc định: "{repoName}-{repoBranch}")
 - `appName`: Tên ứng dụng (mặc định: repoName)
-- `registry`: Docker registry (mặc định: '172.16.3.0/mtw')
+- `registry`: Docker registry (mặc định: env.DOCKER_REGISTRY hoặc '172.16.3.0/mtw')
 - `commitHash`: Git commit hash (mặc định: env.GIT_COMMIT?.take(7))
+
+**Mặc định tự động:**
+- NAMESPACE = REPO_NAME (ví dụ: `hyra-one-base-api`)
+- DEPLOYMENT = REPO_NAME-REPO_BRANCH (ví dụ: `hyra-one-base-api-main`)
+- APP_NAME = REPO_NAME
+- REGISTRY từ Jenkins environment variable `DOCKER_REGISTRY`
 
 **Trả về:** Map chứa các biến: REPO_NAME, REPO_BRANCH, NAMESPACE, DEPLOYMENT, APP_NAME, REGISTRY, COMMIT_HASH
 
 **Ví dụ:**
 ```groovy
 script {
-    def vars = getProjectVars([
-        registry: 'my-registry.com',
-        namespace: 'production'
-    ])
+    def vars = getProjectVars()
 
-    // Sử dụng biến trong các step khác
+    // Tự động từ Git:
+    // NAMESPACE = hyra-one-base-api (repo name)
+    // DEPLOYMENT = hyra-one-base-api-main (repo-branch)
+    // REGISTRY từ Jenkins env.DOCKER_REGISTRY
+
     dockerBuildPush(
         image: "${vars.REGISTRY}/${vars.APP_NAME}",
         tag: vars.COMMIT_HASH
@@ -198,10 +205,10 @@ pipeline {
         stage('Setup') {
             steps {
                 script {
-                    env.PROJECT_VARS = getProjectVars([
-                        registry: '172.16.3.0/mtw',
-                        deployment: 'hyra-one-base-api-beta-api'
-                    ])
+                    env.PROJECT_VARS = getProjectVars()
+                    // Tự động:
+                    // NAMESPACE = hyra-one-base-api (repo name)
+                    // DEPLOYMENT = hyra-one-base-api-main (repo-branch)
                 }
             }
         }

@@ -12,14 +12,20 @@ def call(Map config = [:]) {
     }
   }
 
+  // Calculate branch name
+  def branchName = config.repoBranch ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME ?: 'main'
+
+  // Calculate final repo name for consistent use
+  def finalRepoName = config.repoName ?: repoName ?: 'unknown-repo'
+
   // Set defaults and allow overrides
   def vars = [
-    REPO_NAME: config.repoName ?: repoName ?: 'unknown-repo',
-    REPO_BRANCH: config.repoBranch ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME ?: 'main',
-    NAMESPACE: config.namespace ?: repoName ?: 'default',
-    DEPLOYMENT: config.deployment ?: "${repoName}-deployment",
-    APP_NAME: config.appName ?: repoName ?: 'app',
-    REGISTRY: config.registry ?: '172.16.3.0/mtw',
+    REPO_NAME: finalRepoName,
+    REPO_BRANCH: branchName,
+    NAMESPACE: config.namespace ?: finalRepoName,
+    DEPLOYMENT: config.deployment ?: "${finalRepoName}-${branchName}",
+    APP_NAME: config.appName ?: finalRepoName,
+    REGISTRY: config.registry ?: env.DOCKER_REGISTRY ?: '172.16.3.0/mtw',
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
   ]
 
