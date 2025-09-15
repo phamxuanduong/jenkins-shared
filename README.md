@@ -110,8 +110,47 @@ k8sGetConfig(
 )
 ```
 
+### deployPipeline
+Pipeline hoàn chỉnh với cấu hình tập trung.
+
+**Tham số:**
+- `appName` (bắt buộc): Tên ứng dụng
+- `registry` (bắt buộc): Docker registry URL
+- `namespace` (bắt buộc): Kubernetes namespace
+- `dockerfile` (tùy chọn): Đường dẫn Dockerfile (mặc định: 'Dockerfile')
+- `context` (tùy chọn): Build context (mặc định: '.')
+- `deploymentName` (tùy chọn): Tên deployment (mặc định: '{appName}-deployment')
+- `commitHash` (tùy chọn): Git commit hash (mặc định: env.GIT_COMMIT?.take(7))
+- `buildStage` (tùy chọn): Bật/tắt build stage (mặc định: true)
+- `deployStage` (tùy chọn): Bật/tắt deploy stage (mặc định: true)
+
+**Ví dụ:**
+```groovy
+@Library('jenkins-shared') _
+
+deployPipeline([
+    appName: 'hyra-one-base-api',
+    registry: '172.16.3.0/mtw',
+    namespace: 'hyra-one-base-api',
+    deploymentName: 'hyra-one-base-api-beta-api'
+])
+```
+
 ## Jenkinsfile hoàn chỉnh
 
+### Cách 1: Sử dụng deployPipeline (Đơn giản)
+```groovy
+@Library('jenkins-shared') _
+
+deployPipeline([
+    appName: 'hyra-one-base-api',
+    registry: '172.16.3.0/mtw',
+    namespace: 'hyra-one-base-api',
+    deploymentName: 'hyra-one-base-api-beta-api'
+])
+```
+
+### Cách 2: Jenkinsfile truyền thống
 ```groovy
 @Library('jenkins-shared') _
 
@@ -125,18 +164,9 @@ pipeline {
     }
 
     stages {
-        stage('Build') {
+        stage('Build & Push') {
             steps {
-                dockerBuild(
-                    image: "${REGISTRY}/${APP_NAME}",
-                    tag: "${COMMIT_HASH}"
-                )
-            }
-        }
-
-        stage('Push') {
-            steps {
-                dockerPush(
+                dockerBuildPush(
                     image: "${REGISTRY}/${APP_NAME}",
                     tag: "${COMMIT_HASH}"
                 )
