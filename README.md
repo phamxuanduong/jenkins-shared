@@ -51,6 +51,25 @@ dockerPush(
 )
 ```
 
+### dockerBuildPush
+Xây dựng và đẩy Docker image trong một bước.
+
+**Tham số:**
+- `image` (bắt buộc): Tên image
+- `tag` (bắt buộc): Tag cho image
+- `dockerfile` (tùy chọn): Đường dẫn Dockerfile (mặc định: 'Dockerfile')
+- `context` (tùy chọn): Build context (mặc định: '.')
+
+**Ví dụ:**
+```groovy
+dockerBuildPush(
+    image: '172.16.3.0/mtw/my-app',
+    tag: env.GIT_COMMIT?.take(7),
+    dockerfile: 'docker/Dockerfile',
+    context: '.'
+)
+```
+
 ### k8sSetImage
 Cập nhật image cho Kubernetes deployment.
 
