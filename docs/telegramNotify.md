@@ -85,7 +85,6 @@ Function tự động tạo message với format sau:
 📦 Project: my-app
 🌿 Branch: beta/api
 🏷️ Tag: abc123d
-🚀 Registry: registry-beta.com
 
 ⏱️ Duration: 2 min 30 sec
 🔗 Build: #42

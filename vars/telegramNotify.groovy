@@ -100,7 +100,6 @@ ${statusEmoji} *Build ${status}*
 📦 *Project:* `${vars.REPO_NAME}`
 🌿 *Branch:* `${vars.REPO_BRANCH}`
 🏷️ *Tag:* `${vars.COMMIT_HASH}`
-🚀 *Registry:* `${vars.REGISTRY}`
 
 ⏱️ *Duration:* ${duration}
 🔗 *Build:* [#${env.BUILD_NUMBER}](${buildUrl})
