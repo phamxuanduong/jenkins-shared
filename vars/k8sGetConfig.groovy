@@ -29,7 +29,7 @@ def call(Map args = [:]) {
         script: """
         if kubectl get configmap '${cm}' -n '${ns}' >/dev/null 2>&1; then
           echo "[DEBUG] Getting keys from ConfigMap '${cm}'"
-          kubectl get configmap '${cm}' -n '${ns}' -o go-template='{{range \\$key, \\$value := .data}}{{\\$key}}{{"\\n"}}{{end}}' 2>/dev/null || true
+          kubectl get configmap '${cm}' -n '${ns}' -o go-template='{{range \\$$k, \\$$v := .data}}{{\\$$k}}{{"\\n"}}{{end}}' 2>/dev/null || true
         fi
         """,
         returnStdout: true
