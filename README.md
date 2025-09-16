@@ -1,6 +1,26 @@
 # Jenkins Shared Library
 
-Thư viện chung Jenkins cung cấp các hàm tiện ích cho CI/CD pipeline.
+Thư viện chung Jenkins cung cấp các hàm tiện ích cho CI/CD pipeline với khả năng tự động hóa hoàn toàn.
+
+## 🚀 Quick Start
+
+### Jenkinsfile đơn giản nhất (1 dòng):
+```groovy
+@Library('jenkins-shared@main') _
+
+pipeline {
+  agent { label 'your-agent' }
+  stages {
+    stage('CI/CD') {
+      steps {
+        script {
+          cicdPipeline()  // Thực hiện toàn bộ CI/CD tự động
+        }
+      }
+    }
+  }
+}
+```
 
 ## Cài đặt
 
@@ -12,10 +32,43 @@ Thư viện chung Jenkins cung cấp các hàm tiện ích cho CI/CD pipeline.
 
 2. Hoặc cấu hình trong Jenkinsfile:
 ```groovy
-@Library('jenkins-shared') _
+@Library('jenkins-shared@main') _
 ```
 
+## 🎯 Tính năng chính
+
+- **Hoàn toàn tự động**: Tất cả hàm có thể gọi không cần tham số
+- **Dual ConfigMap**: Hỗ trợ ConfigMap `general` (chung) và branch-specific
+- **Smart registry**: Tự động chọn registry theo branch pattern
+- **Branch sanitization**: Tự động xử lý branch names cho Kubernetes
+- **Override linh hoạt**: Có thể override bất kỳ tham số nào khi cần
+
+## 📚 Documentation
+
+### Detailed Documentation
+- **[k8sGetConfig](./docs/k8sGetConfig.md)** - ConfigMap management với dual ConfigMap support
+- **[getProjectVars](./docs/getProjectVars.md)** - Auto-detect project variables từ Git
+- **[cicdPipeline](./docs/cicdPipeline.md)** - One-line CI/CD pipeline function
+- **[Docker Functions](./docs/docker-functions.md)** - Build và push Docker images
+- **[Kubernetes Functions](./docs/k8s-functions.md)** - Deployment và Kubernetes operations
+- **[Troubleshooting](./docs/troubleshooting.md)** - Debug guide và common issues
+
 ## Các hàm có sẵn
+
+### cicdPipeline ⭐
+**Function chính - thực hiện toàn bộ CI/CD trong 1 lần gọi**
+
+```groovy
+// Siêu đơn giản - chỉ 1 dòng!
+cicdPipeline()
+
+// Với customization
+cicdPipeline(
+    getConfigStage: true,     // Lấy ConfigMap
+    buildStage: true,         // Build & push Docker
+    deployStage: true         // Deploy to K8s
+)
+```
 
 ### dockerBuild
 Xây dựng Docker image.
@@ -138,6 +191,18 @@ Lấy dữ liệu từ Kubernetes ConfigMap và lưu vào file. Tự động l�
 2. Lấy tất cả files từ ConfigMap theo branch (files riêng cho branch)
 3. Files từ branch sẽ ghi đè lên files chung nếu trùng tên
 
+**Implementation Details:**
+- **Key extraction**: Sử dụng `kubectl -o yaml` + `awk` để parse ConfigMap keys
+- **Special characters**: Hỗ trợ keys có dấu chấm (`.env`) và ký tự đặc biệt
+- **Data fetching**: Dùng `go-template` với `index` function cho keys có ký tự đặc biệt
+- **Error handling**: Graceful skip nếu ConfigMap/key không tồn tại
+- **Multi-line support**: Hỗ trợ content nhiều dòng từ ConfigMap
+
+**Troubleshooting:**
+- Nếu `.env` báo empty: Check ConfigMap có data với `kubectl describe configmap`
+- Nếu keys không được detect: Check YAML format với `kubectl get cm -o yaml`
+- Nếu special keys fail: Function dùng `go-template index` để handle tất cả key types
+
 **Ví dụ:**
 ```groovy
 // Hoàn toàn tự động - lấy từ 'general' và branch hiện tại
@@ -165,6 +230,38 @@ k8sGetConfig(
         '.env': 'deploy/.env'
     ]
 )
+```
+
+**Ví dụ ConfigMap setup:**
+```yaml
+# ConfigMap general (shared)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: general
+  namespace: my-app
+data:
+  .env: |
+    ENV=production
+    DATABASE_CONNECTION=mysql
+  docker-compose.yml: |
+    version: '3'
+    services: ...
+
+# ConfigMap beta-api (branch-specific)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta-api
+  namespace: my-app
+data:
+  Dockerfile: |
+    FROM node:18
+    COPY . /app
+  .env: |
+    ENV=beta
+    DEBUG=true
+    # Override .env từ general
 ```
 
 ### getProjectVars
@@ -389,7 +486,7 @@ pipeline {
 }
 ```
 
-## Setup Jenkins Environment Variables
+## 🔧 Setup Jenkins Environment Variables
 
 Cần thiết lập các biến môi trường trong Jenkins:
 
@@ -400,16 +497,43 @@ REGISTRY_STAGING=registry-staging.company.com
 REGISTRY_PROD=registry-prod.company.com
 ```
 
-## Workflow tiêu chuẩn
+## 🚀 Workflow tiêu chuẩn
 
-1. **Build**: Xây dựng Docker image với commit hash làm tag
-2. **Push**: Đẩy image lên registry phù hợp với branch
-3. **Deploy**: Cập nhật Kubernetes deployment với image mới
+### Automatic CI/CD Flow
+1. **Setup**: Auto-detect project info từ Git (repo, branch, commit)
+2. **ConfigMap**: Lấy configs từ `general` + branch-specific ConfigMaps
+3. **Build**: Build Docker image với auto-generated name và commit tag
+4. **Push**: Push lên registry được auto-select theo branch pattern
+5. **Deploy**: Update K8s deployment với image mới
 
-**Registry Selection Logic:**
+### Registry Selection Logic
 - `develop`, `dev-*`, `beta`, `beta-*` → `REGISTRY_BETA`
 - `staging`, `staging-*` → `REGISTRY_STAGING`
 - `main`, `master`, `prod`, `production` → `REGISTRY_PROD`
 - Các branch khác → `REGISTRY_BETA` (fallback)
 
-Tất cả các hàm đều có error handling và logging chi tiết để dễ debug.
+### Branch Sanitization
+- `beta/api` → `beta-api` (K8s compatible)
+- `feature/user-auth` → `feature-user-auth`
+- Tự động handle special characters
+
+## 🔍 Key Features
+
+- **Zero Configuration**: Tất cả hàm hoạt động mà không cần parameters
+- **Smart Defaults**: Auto-detect mọi thứ từ Git và environment
+- **Dual ConfigMap**: Support shared + branch-specific configurations
+- **Error Resilient**: Graceful handling của missing resources
+- **Debug Friendly**: Chi tiết logs và troubleshooting guides
+- **Kubernetes Native**: Tuân thủ K8s naming conventions
+
+## 🆘 Need Help?
+
+1. **Check logs**: Tất cả functions có detailed logging
+2. **Read docs**: Chi tiết documentation cho mỗi function
+3. **Debug guide**: [Troubleshooting](./docs/troubleshooting.md) cho common issues
+4. **Test individual**: Có thể test từng function riêng lẻ
+
+**Note về `.env` issue đã fix**:
+- Function hiện sử dụng `go-template index` để handle keys có dấu chấm
+- ConfigMap parsing dùng YAML + awk thay vì complex regex
+- Debug output không interfere với key extraction
