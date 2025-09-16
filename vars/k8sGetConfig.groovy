@@ -24,14 +24,12 @@ def call(Map args = [:]) {
 
     // Get all keys from this ConfigMap if items not specified
     if (!items) {
-      // Get only data keys using kubectl get with jsonpath
+      // Get only data keys using kubectl get with go-template
       def keysList = sh(
         script: """
         if kubectl get configmap '${cm}' -n '${ns}' >/dev/null 2>&1; then
-          kubectl get configmap '${cm}' -n '${ns}' -o jsonpath='{.data}' 2>/dev/null | \
-          tr ',' '\\n' | \
-          sed -n 's/.*"\\([^"]*\\)":.*/\\1/p' | \
-          sort -u || true
+          echo "[DEBUG] Getting keys from ConfigMap '${cm}'"
+          kubectl get configmap '${cm}' -n '${ns}' -o go-template='{{range \\$key, \\$value := .data}}{{\\$key}}{{"\\n"}}{{end}}' 2>/dev/null || true
         fi
         """,
         returnStdout: true
