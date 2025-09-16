@@ -20,7 +20,7 @@ Lấy các biến dự án tự động từ Git và environment, có thể over
 - `SANITIZED_BRANCH`: Branch name được sanitize cho Kubernetes (`beta/api` → `beta-api`)
 - `NAMESPACE`: = REPO_NAME
 - `DEPLOYMENT`: = `{REPO_NAME}-{SANITIZED_BRANCH}`
-- `APP_NAME`: = REPO_NAME
+- `APP_NAME`: = `{REPO_NAME}-{SANITIZED_BRANCH}`
 - `REGISTRY`: Tự động chọn theo branch pattern
 - `COMMIT_HASH`: 7 ký tự đầu của Git commit
 
@@ -121,7 +121,7 @@ Function trả về Map với các keys:
     SANITIZED_BRANCH: 'beta-api',
     NAMESPACE: 'my-app',
     DEPLOYMENT: 'my-app-beta-api',
-    APP_NAME: 'my-app',
+    APP_NAME: 'my-app-beta-api',
     REGISTRY: 'registry-beta.company.com',
     COMMIT_HASH: 'abc123d'
 ]

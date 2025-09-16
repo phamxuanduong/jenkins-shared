@@ -278,8 +278,8 @@ Lấy các biến dự án tự động từ Git và environment, có thể over
 
 **Mặc định tự động:**
 - NAMESPACE = REPO_NAME (ví dụ: `hyra-one-base-api`)
-- DEPLOYMENT = REPO_NAME-REPO_BRANCH (ví dụ: `hyra-one-base-api-main`)
-- APP_NAME = REPO_NAME
+- DEPLOYMENT = REPO_NAME-SANITIZED_BRANCH (ví dụ: `hyra-one-base-api-beta-api`)
+- APP_NAME = REPO_NAME-SANITIZED_BRANCH (ví dụ: `hyra-one-base-api-beta-api`)
 - REGISTRY tự động chọn theo branch:
   - Branch chứa `dev`, `beta` → `env.REGISTRY_BETA`
   - Branch chứa `staging` → `env.REGISTRY_STAGING`

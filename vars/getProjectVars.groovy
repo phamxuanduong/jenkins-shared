@@ -43,7 +43,7 @@ def call(Map config = [:]) {
     SANITIZED_BRANCH: sanitizedBranch,
     NAMESPACE: config.namespace ?: finalRepoName,
     DEPLOYMENT: config.deployment ?: "${finalRepoName}-${sanitizedBranch}",
-    APP_NAME: config.appName ?: finalRepoName,
+    APP_NAME: config.appName ?: "${finalRepoName}-${sanitizedBranch}",
     REGISTRY: registry,
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
   ]
