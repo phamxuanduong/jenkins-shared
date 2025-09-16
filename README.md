@@ -347,31 +347,6 @@ cicdPipeline(
 )
 ```
 
-### deployPipeline
-Pipeline hoàn chỉnh với cấu hình tập trung (legacy).
-
-**Tham số:**
-- `appName` (bắt buộc): Tên ứng dụng
-- `registry` (bắt buộc): Docker registry URL
-- `namespace` (bắt buộc): Kubernetes namespace
-- `dockerfile` (tùy chọn): Đường dẫn Dockerfile (mặc định: 'Dockerfile')
-- `context` (tùy chọn): Build context (mặc định: '.')
-- `deploymentName` (tùy chọn): Tên deployment (mặc định: '{appName}-deployment')
-- `commitHash` (tùy chọn): Git commit hash (mặc định: env.GIT_COMMIT?.take(7))
-- `buildStage` (tùy chọn): Bật/tắt build stage (mặc định: true)
-- `deployStage` (tùy chọn): Bật/tắt deploy stage (mặc định: true)
-
-**Ví dụ:**
-```groovy
-@Library('jenkins-shared') _
-
-deployPipeline([
-    appName: 'hyra-one-base-api',
-    registry: '172.16.3.0/mtw',
-    namespace: 'hyra-one-base-api',
-    deploymentName: 'hyra-one-base-api-beta-api'
-])
-```
 
 ## Jenkinsfile hoàn chỉnh
 
@@ -394,19 +369,8 @@ pipeline {
 }
 ```
 
-### Cách 2: Sử dụng deployPipeline (Legacy)
-```groovy
-@Library('jenkins-shared') _
 
-deployPipeline([
-    appName: 'hyra-one-base-api',
-    registry: '172.16.3.0/mtw',
-    namespace: 'hyra-one-base-api',
-    deploymentName: 'hyra-one-base-api-beta-api'
-])
-```
-
-### Cách 3: Sử dụng getProjectVars (Linh hoạt)
+### Cách 2: Sử dụng getProjectVars (Linh hoạt)
 ```groovy
 @Library('jenkins-shared@main') _
 
@@ -451,7 +415,7 @@ pipeline {
 }
 ```
 
-### Cách 4: Hoàn toàn tự động (Đơn giản nhất)
+### Cách 3: Hoàn toàn tự động (Đơn giản nhất)
 ```groovy
 @Library('jenkins-shared@main') _
 
