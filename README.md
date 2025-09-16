@@ -48,7 +48,6 @@ pipeline {
 ### Detailed Documentation
 - **[k8sGetConfig](./docs/k8sGetConfig.md)** - ConfigMap management với dual ConfigMap support
 - **[getProjectVars](./docs/getProjectVars.md)** - Auto-detect project variables từ Git
-- **[cicdPipeline](./docs/cicdPipeline.md)** - One-line CI/CD pipeline function
 - **[Docker Functions](./docs/docker-functions.md)** - Build và push Docker images
 - **[Kubernetes Functions](./docs/k8s-functions.md)** - Deployment và Kubernetes operations
 - **[Troubleshooting](./docs/troubleshooting.md)** - Debug guide và common issues
