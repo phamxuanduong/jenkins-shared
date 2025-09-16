@@ -46,6 +46,7 @@ pipeline {
 ## 📚 Documentation
 
 ### Detailed Documentation
+- **[telegramNotify](./docs/telegramNotify.md)** - Telegram notifications với rich formatting
 - **[k8sGetConfig](./docs/k8sGetConfig.md)** - ConfigMap management với dual ConfigMap support
 - **[getProjectVars](./docs/getProjectVars.md)** - Auto-detect project variables từ Git
 - **[Docker Functions](./docs/docker-functions.md)** - Build và push Docker images
@@ -54,19 +55,20 @@ pipeline {
 
 ## Các hàm có sẵn
 
-### cicdPipeline ⭐
-**Function chính - thực hiện toàn bộ CI/CD trong 1 lần gọi**
+### telegramNotify 📱
+**Gửi thông báo Telegram về build status**
 
 ```groovy
-// Siêu đơn giản - chỉ 1 dòng!
-cicdPipeline()
+// Tự động tạo message từ build info
+telegramNotify()
 
-// Với customization
-cicdPipeline(
-    getConfigStage: true,     // Lấy ConfigMap
-    buildStage: true,         // Build & push Docker
-    deployStage: true         // Deploy to K8s
+// Custom message
+telegramNotify(
+    message: "✅ *Deploy thành công!*\n\nApp: `my-app`"
 )
+
+// Silent notification
+telegramNotify(disableNotification: true)
 ```
 
 ### dockerBuild
@@ -349,27 +351,7 @@ cicdPipeline(
 
 ## Jenkinsfile hoàn chỉnh
 
-### Cách 1: Sử dụng cicdPipeline (Siêu đơn giản)
-```groovy
-@Library('jenkins-shared@main') _
-
-pipeline {
-  agent { label 'beta' }
-
-  stages {
-    stage('CI/CD') {
-      steps {
-        script {
-          cicdPipeline()
-        }
-      }
-    }
-  }
-}
-```
-
-
-### Cách 2: Sử dụng getProjectVars (Linh hoạt)
+### Cách 1: Sử dụng getProjectVars (Linh hoạt)
 ```groovy
 @Library('jenkins-shared@main') _
 
@@ -414,7 +396,7 @@ pipeline {
 }
 ```
 
-### Cách 3: Hoàn toàn tự động (Đơn giản nhất)
+### Cách 2: Hoàn toàn tự động (Đơn giản nhất)
 ```groovy
 @Library('jenkins-shared@main') _
 
@@ -443,6 +425,21 @@ pipeline {
         script {
           k8sSetImage()
         }
+      }
+    }
+  }
+
+  post {
+    success {
+      script {
+        telegramNotify()
+      }
+    }
+    failure {
+      script {
+        telegramNotify(
+          message: "❌ *Build Failed*\n\nProject: `${env.JOB_NAME}`\nBuild: [#${env.BUILD_NUMBER}](${env.BUILD_URL})"
+        )
       }
     }
   }
