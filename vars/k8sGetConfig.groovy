@@ -28,7 +28,7 @@ def call(Map args = [:]) {
       def keysList = sh(
         script: """
         if kubectl get configmap '${cm}' -n '${ns}' >/dev/null 2>&1; then
-          kubectl describe configmap '${cm}' -n '${ns}' | awk '/^Data$/,/^Events:/ {if(/^[a-zA-Z0-9_.-]+:/ && !/^Data:/ && !/^Events:/) print \$1}' | sed 's/:$//' | sort -u || true
+          kubectl describe configmap '${cm}' -n '${ns}' | awk '/^Data\\$/,/^Events:/ {if(/^[a-zA-Z0-9_.-]+:/ && !/^Data:/ && !/^Events:/) print \\$1}' | sed 's/:\\$//' | sort -u || true
         fi
         """,
         returnStdout: true
