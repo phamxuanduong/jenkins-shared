@@ -60,8 +60,9 @@ def call(Map args = [:]) {
       returnStdout: true
     ).trim()
 
-    // Parse response
-    def jsonResponse = readJSON text: response
+    // Parse response using Groovy JsonSlurper
+    def jsonSlurper = new groovy.json.JsonSlurper()
+    def jsonResponse = jsonSlurper.parseText(response)
 
     if (jsonResponse.ok) {
       echo "[SUCCESS] Telegram notification sent successfully"
