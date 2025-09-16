@@ -36,9 +36,9 @@ def call(Map args = [:]) {
       ).trim()
 
       if (keysList) {
-        keysList.split('\n').each { String key ->
-          if (key && key.trim()) {
-            fetchConfigKey(ns, cm, key.trim(), key.trim())
+        keysList.split('\n').each { String keyName ->
+          if (keyName && keyName.trim()) {
+            fetchConfigKey(ns, cm, keyName.trim(), keyName.trim())
           }
         }
       } else {
@@ -46,8 +46,8 @@ def call(Map args = [:]) {
       }
     } else {
       // Use specified items
-      items.each { String key, String destPath ->
-        fetchConfigKey(ns, cm, key, destPath)
+      items.each { String keyName, String destPath ->
+        fetchConfigKey(ns, cm, keyName, destPath)
       }
     }
   }
