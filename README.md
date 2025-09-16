@@ -116,36 +116,53 @@ k8sSetImage(
 ```
 
 ### k8sGetConfig
-Lấy dữ liệu từ Kubernetes ConfigMap và lưu vào file.
+Lấy dữ liệu từ Kubernetes ConfigMap và lưu vào file. Tự động lấy từ 2 ConfigMaps: `general` (chung) và branch-specific.
 
 **Tham số (tất cả tùy chọn):**
 - `namespace`: Kubernetes namespace (mặc định: tự động từ `getProjectVars().NAMESPACE`)
-- `configmap`: Tên ConfigMap (mặc định: tự động từ `getProjectVars().SANITIZED_BRANCH`)
-- `items`: Map các key và đường dẫn file đích (mặc định: `['Dockerfile': 'Dockerfile', '.env': '.env']`)
+- `configmap`: Tên ConfigMap theo branch (mặc định: tự động từ `getProjectVars().SANITIZED_BRANCH`)
+- `generalConfigmap`: Tên ConfigMap chung (mặc định: 'general')
+- `items`: Map các key và đường dẫn file đích (mặc định: lấy tất cả keys từ cả 2 ConfigMaps)
 - `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
 
 **Mặc định tự động:**
 - `namespace` = REPO_NAME (từ Git URL)
-- `configmap` = SANITIZED_BRANCH (branch name được sanitize cho K8s)
-- Luôn lấy `Dockerfile` về thư mục hiện tại
-- Lấy `.env` về thư mục hiện tại (nếu có)
-- Tự động bỏ qua nếu key không tồn tại hoặc rỗng
+- `generalConfigmap` = 'general' (chứa files dùng chung cho tất cả branches)
+- `configmap` = SANITIZED_BRANCH (chứa files riêng cho branch này)
+- Lấy tất cả data từ cả 2 ConfigMaps
+- Files từ branch ConfigMap sẽ override files từ general ConfigMap (nếu cùng tên)
+- Tự động bỏ qua nếu ConfigMap/key không tồn tại
+
+**Workflow:**
+1. Lấy tất cả files từ ConfigMap `general` (files dùng chung)
+2. Lấy tất cả files từ ConfigMap theo branch (files riêng cho branch)
+3. Files từ branch sẽ ghi đè lên files chung nếu trùng tên
 
 **Ví dụ:**
 ```groovy
-// Hoàn toàn tự động - lấy từ branch hiện tại
+// Hoàn toàn tự động - lấy từ 'general' và branch hiện tại
 k8sGetConfig()
 
-// Chỉ định configmap khác
-k8sGetConfig(configmap: 'prod')
+// Custom general ConfigMap name
+k8sGetConfig(generalConfigmap: 'shared')
 
-// Custom với đường dẫn khác
+// Chỉ định specific items
+k8sGetConfig(
+    items: [
+        'Dockerfile': 'Dockerfile',
+        '.env': '.env',
+        'config.yaml': 'config/app.yaml'
+    ]
+)
+
+// Full custom
 k8sGetConfig(
     namespace: 'my-namespace',
-    configmap: 'app-config',
+    generalConfigmap: 'shared-config',
+    configmap: 'beta-config',
     items: [
-        'Dockerfile': 'build/images/base/Dockerfile',
-        '.env': 'deploy/dev/.env'
+        'Dockerfile': 'build/Dockerfile',
+        '.env': 'deploy/.env'
     ]
 )
 ```
