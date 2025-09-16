@@ -24,16 +24,21 @@ def call(Map args = [:]) {
 
     // Get all keys from this ConfigMap if items not specified
     if (!items) {
-      def allKeys = sh(
-        script: """kubectl get configmap '${cm}' -n '${ns}' -o jsonpath='{.data}' 2>/dev/null || echo '{}'""",
+      // Get all keys using kubectl describe (more reliable)
+      def keysList = sh(
+        script: """
+        if kubectl get configmap '${cm}' -n '${ns}' >/dev/null 2>&1; then
+          kubectl describe configmap '${cm}' -n '${ns}' | grep '^[a-zA-Z0-9].*:' | awk -F':' '{print \$1}' | sort -u || true
+        fi
+        """,
         returnStdout: true
       ).trim()
 
-      if (allKeys && allKeys != '{}') {
-        // Parse JSON to get all keys and create items map
-        def keysJson = readJSON text: allKeys
-        keysJson.each { key, value ->
-          fetchConfigKey(ns, cm, key, key)
+      if (keysList) {
+        keysList.split('\n').each { String key ->
+          if (key && key.trim() && !key.trim().startsWith('Name:') && !key.trim().startsWith('Namespace:')) {
+            fetchConfigKey(ns, cm, key.trim(), key.trim())
+          }
         }
       } else {
         echo "[WARN] ConfigMap '${cm}' not found or empty, skipping..."
