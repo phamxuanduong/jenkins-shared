@@ -1,3 +1,17 @@
+/**
+ * getProjectVars - Auto-detect project variables from Git and environment
+ *
+ * @param config Map of optional parameters:
+ *   - repoName: Repository name (default: auto from GIT_URL)
+ *   - repoBranch: Branch name (default: auto from GIT_BRANCH)
+ *   - namespace: Kubernetes namespace (default: repoName)
+ *   - deployment: Deployment name (default: "{repoName}-{sanitizedBranch}")
+ *   - appName: Application name (default: "{repoName}-{sanitizedBranch}")
+ *   - registry: Docker registry (default: auto-select based on branch)
+ *   - commitHash: Git commit hash (default: env.GIT_COMMIT?.take(7))
+ *
+ * @return Map containing project variables
+ */
 def call(Map config = [:]) {
   // Extract repository info from GIT_URL
   def gitUrl = env.GIT_URL ?: ''
@@ -50,7 +64,7 @@ def call(Map config = [:]) {
 
   // Log all variables for debugging
   echo """
-[INFO] Project Variables:
+[INFO] getProjectVars: Project Variables:
   REPO_NAME:     ${vars.REPO_NAME}
   REPO_BRANCH:   ${vars.REPO_BRANCH}
   SANITIZED_BRANCH: ${sanitizedBranch}

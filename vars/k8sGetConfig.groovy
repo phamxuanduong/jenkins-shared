@@ -1,3 +1,15 @@
+/**
+ * k8sGetConfig - Retrieve configuration from Kubernetes ConfigMaps
+ *
+ * @param args Map of optional parameters:
+ *   - namespace: Kubernetes namespace (default: from getProjectVars)
+ *   - configmap: Branch-specific ConfigMap name (default: sanitized branch name)
+ *   - generalConfigmap: General ConfigMap name (default: 'general')
+ *   - items: Map of key-value pairs to extract (default: all keys from both ConfigMaps)
+ *   - vars: Project variables (default: auto-call getProjectVars)
+ *
+ * @return void - Files are written to workspace
+ */
 def call(Map args = [:]) {
   // Get project vars if not provided
   def vars = args.vars ?: getProjectVars()
@@ -20,7 +32,7 @@ def call(Map args = [:]) {
 """
 
   configmaps.each { String cm ->
-    echo "[INFO] Processing ConfigMap: '${cm}'"
+    echo "[INFO] k8sGetConfig: Processing ConfigMap: '${cm}'"
 
     // Get all keys from this ConfigMap if items not specified
     if (!items) {
@@ -28,7 +40,7 @@ def call(Map args = [:]) {
       def keysList = sh(
         script: """
         if kubectl get configmap '${cm}' -n '${ns}' >/dev/null 2>&1; then
-          echo "[DEBUG] Getting keys from ConfigMap '${cm}'" >&2
+          echo "[DEBUG] k8sGetConfig: Getting keys from ConfigMap '${cm}'" >&2
           kubectl get configmap '${cm}' -n '${ns}' -o yaml | awk '/^data:/ {flag=1; next} /^[a-zA-Z]/ && flag {flag=0} flag && /^  [^ ]/ {gsub(/^  /, ""); gsub(/:.*/, ""); print}' 2>/dev/null || true
         fi
         """,
@@ -42,7 +54,7 @@ def call(Map args = [:]) {
           }
         }
       } else {
-        echo "[WARN] ConfigMap '${cm}' not found or empty, skipping..."
+        echo "[WARN] k8sGetConfig: ConfigMap '${cm}' not found or empty, skipping..."
       }
     } else {
       // Use specified items
@@ -55,7 +67,7 @@ def call(Map args = [:]) {
 
 def fetchConfigKey(String ns, String cm, String key, String destPath) {
   if (!destPath) {
-    echo "[WARN] Empty destination path for key '${key}', skipping..."
+    echo "[WARN] k8sGetConfig: Empty destination path for key '${key}', skipping..."
     return
   }
 
@@ -64,7 +76,7 @@ def fetchConfigKey(String ns, String cm, String key, String destPath) {
     script: """#!/bin/bash
       set -Eeuo pipefail
 
-      echo "[INFO] Fetching key='${key}' from ConfigMap='${cm}' (ns='${ns}')"
+      echo "[INFO] k8sGetConfig: Fetching key='${key}' from ConfigMap='${cm}' (ns='${ns}')"
       dir=\$(dirname '${destPath}')
       [ "\$dir" = "." ] || mkdir -p "\$dir"
 
@@ -73,14 +85,14 @@ def fetchConfigKey(String ns, String cm, String key, String destPath) {
       # Check if key exists in configmap first - use go-template for keys with special chars
       if ! kubectl get configmap '${cm}' -n '${ns}' \\
            -o go-template='{{index .data "'${key}'"}}' > "\$tmp" 2>/dev/null; then
-        echo "[WARN] ConfigMap '${cm}' not found or key '${key}' missing, skipping..." >&2
+        echo "[WARN] k8sGetConfig: ConfigMap '${cm}' not found or key '${key}' missing, skipping..." >&2
         rm -f "\$tmp"
         exit 0
       fi
 
       # Check if the key actually has data
       if [ ! -s "\$tmp" ]; then
-        echo "[WARN] Key '${key}' is empty in ConfigMap '${cm}', skipping..." >&2
+        echo "[WARN] k8sGetConfig: Key '${key}' is empty in ConfigMap '${cm}', skipping..." >&2
         rm -f "\$tmp"
         exit 0
       fi
@@ -88,7 +100,7 @@ def fetchConfigKey(String ns, String cm, String key, String destPath) {
       bytes=\$(wc -c < "\$tmp" | tr -d ' ')
       sha=\$(sha256sum "\$tmp" | awk '{print \$1}')
       mv -f "\$tmp" '${destPath}'
-      echo "[OK] Wrote '${destPath}' (\${bytes} bytes, sha256=\$sha) from ConfigMap '${cm}'"
+      echo "[SUCCESS] k8sGetConfig: Wrote '${destPath}' (\${bytes} bytes, sha256=\$sha) from ConfigMap '${cm}'"
     """
   )
 }

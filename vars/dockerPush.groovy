@@ -1,3 +1,14 @@
+/**
+ * dockerPush - Push Docker images to registry with automatic configuration
+ *
+ * @param args Map of optional parameters:
+ *   - image: Docker image name (default: auto from getProjectVars)
+ *   - tag: Image tag (default: commit hash)
+ *   - vars: Project variables (default: auto-call getProjectVars)
+ *
+ * @return void
+ * @throws Exception if Docker push fails
+ */
 def call(Map args = [:]) {
   // Get project vars if not provided
   def vars = args.vars ?: getProjectVars()
@@ -10,11 +21,11 @@ def call(Map args = [:]) {
     script: """#!/bin/bash
       set -Eeuo pipefail
 
-      echo "[INFO] Pushing Docker image ${image}:${tag}"
+      echo "[INFO] dockerPush: Pushing Docker image ${image}:${tag}"
 
       docker push ${image}:${tag}
 
-      echo "[OK] Pushed ${image}:${tag}"
+      echo "[SUCCESS] dockerPush: Pushed ${image}:${tag}"
     """
   )
 }

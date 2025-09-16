@@ -1,3 +1,17 @@
+/**
+ * k8sSetImage - Update Kubernetes deployment with new container image
+ *
+ * @param args Map of optional parameters:
+ *   - deployment: Deployment name (default: from getProjectVars)
+ *   - image: Docker image name (default: auto from getProjectVars)
+ *   - tag: Image tag (default: commit hash)
+ *   - namespace: Kubernetes namespace (default: from getProjectVars)
+ *   - container: Container name pattern (default: '*' for all containers)
+ *   - vars: Project variables (default: auto-call getProjectVars)
+ *
+ * @return void
+ * @throws Exception if kubectl command fails
+ */
 def call(Map args = [:]) {
   // Get project vars if not provided
   def vars = args.vars ?: getProjectVars()
@@ -13,12 +27,12 @@ def call(Map args = [:]) {
     script: """#!/bin/bash
       set -Eeuo pipefail
 
-      echo "[INFO] Updating deployment '${deployment}' in namespace '${namespace}'"
-      echo "[INFO] Setting image to '${image}:${tag}' for container '${container}'"
+      echo "[INFO] k8sSetImage: Updating deployment '${deployment}' in namespace '${namespace}'"
+      echo "[INFO] k8sSetImage: Setting image to '${image}:${tag}' for container '${container}'"
 
       kubectl set image deployment/${deployment} ${container}=${image}:${tag} -n ${namespace}
 
-      echo "[OK] Updated deployment '${deployment}' with image '${image}:${tag}'"
+      echo "[SUCCESS] k8sSetImage: Updated deployment '${deployment}' with image '${image}:${tag}'"
     """
   )
 }

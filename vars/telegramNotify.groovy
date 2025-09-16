@@ -1,3 +1,18 @@
+/**
+ * telegramNotify - Send Telegram notifications with auto environment routing
+ *
+ * @param args Map of optional parameters:
+ *   - botToken: Telegram bot token (default: auto from environment)
+ *   - chatId: Telegram chat ID (default: auto from environment)
+ *   - threadId: Telegram thread ID (default: auto from environment)
+ *   - message: Custom message (default: auto-generated from build info)
+ *   - parseMode: Parse mode (default: 'Markdown')
+ *   - disableNotification: Silent notification (default: false)
+ *   - failOnError: Fail build on notification error (default: true)
+ *   - vars: Project variables (default: auto-call getProjectVars)
+ *
+ * @return void
+ */
 def call(Map args = [:]) {
   // Get project vars if not provided
   def vars = args.vars ?: getProjectVars()
@@ -14,19 +29,19 @@ def call(Map args = [:]) {
 
   // Validate required parameters
   if (!botToken) {
-    echo "[WARN] TELEGRAM_BOT_TOKEN not found, skipping notification"
+    echo "[WARN] telegramNotify: TELEGRAM_BOT_TOKEN not found, skipping notification"
     return
   }
   if (!chatId) {
-    echo "[WARN] TELEGRAM_CHAT_ID not found, skipping notification"
+    echo "[WARN] telegramNotify: TELEGRAM_CHAT_ID not found, skipping notification"
     return
   }
 
-  echo "[INFO] Sending Telegram notification..."
-  echo "[INFO] Environment: ${getEnvironmentName(vars.REPO_BRANCH)}"
-  echo "[INFO] Chat ID: ${chatId}"
+  echo "[INFO] telegramNotify: Sending Telegram notification..."
+  echo "[INFO] telegramNotify: Environment: ${getEnvironmentName(vars.REPO_BRANCH)}"
+  echo "[INFO] telegramNotify: Chat ID: ${chatId}"
   if (threadId) {
-    echo "[INFO] Thread ID: ${threadId}"
+    echo "[INFO] telegramNotify: Thread ID: ${threadId}"
   }
 
   try {
@@ -64,17 +79,17 @@ def call(Map args = [:]) {
     def jsonResponse = readJSON text: response
 
     if (jsonResponse.ok) {
-      echo "[SUCCESS] Telegram notification sent successfully"
-      echo "[INFO] Message ID: ${jsonResponse.result.message_id}"
+      echo "[SUCCESS] telegramNotify: Telegram notification sent successfully"
+      echo "[INFO] telegramNotify: Message ID: ${jsonResponse.result.message_id}"
     } else {
-      echo "[ERROR] Telegram notification failed: ${jsonResponse.description}"
-      error "Telegram notification failed: ${jsonResponse.description}"
+      echo "[ERROR] telegramNotify: Telegram notification failed: ${jsonResponse.description}"
+      error "telegramNotify: Telegram notification failed: ${jsonResponse.description}"
     }
 
   } catch (Exception e) {
-    echo "[ERROR] Failed to send Telegram notification: ${e.getMessage()}"
+    echo "[ERROR] telegramNotify: Failed to send Telegram notification: ${e.getMessage()}"
     if (args.failOnError != false) {
-      error "Telegram notification failed: ${e.getMessage()}"
+      error "telegramNotify: Telegram notification failed: ${e.getMessage()}"
     }
   }
 }
