@@ -193,7 +193,7 @@ groovy.lang.MissingPropertyException: No such property: key
 #### Library not found
 **Triệu chứng:**
 ```
-No such DSL method 'cicdPipeline' found
+No such DSL method 'dockerBuildPush' found
 ```
 
 **Giải pháp:**
@@ -298,8 +298,8 @@ k8sGetConfig(
     ]
 )
 
-// Skip ConfigMap stage if not needed
-cicdPipeline(getConfigStage: false)
+// Skip ConfigMap retrieval if not needed
+// k8sGetConfig() - skip this function call
 ```
 
 ### Slow Docker builds
@@ -334,7 +334,9 @@ pipeline {
             steps {
                 script {
                     timeout(time: 20, unit: 'MINUTES') {
-                        cicdPipeline()
+                        k8sGetConfig()
+                        dockerBuildPush()
+                        k8sSetImage()
                     }
                 }
             }
@@ -354,7 +356,9 @@ script {
         echo "Build: ${env.BUILD_NUMBER}"
         echo "Branch: ${env.GIT_BRANCH}"
 
-        cicdPipeline()
+        k8sGetConfig()
+        dockerBuildPush()
+        k8sSetImage()
 
         echo "=== Pipeline Completed Successfully ==="
     } catch (Exception e) {
@@ -378,9 +382,11 @@ script {
         vars.each { key, value ->
             echo "DEBUG: ${key} = ${value}"
         }
-    }
 
-    cicdPipeline()
+        k8sGetConfig()
+        dockerBuildPush()
+        k8sSetImage()
+    }
 }
 ```
 
@@ -392,17 +398,19 @@ script {
     // Different behavior per environment
     if (vars.REPO_BRANCH.contains('dev')) {
         echo "Development mode - enabling debug"
-        cicdPipeline(
-            getConfigStage: true,
-            buildStage: true,
-            deployStage: false  // No deploy for dev branches
-        )
+        k8sGetConfig()
+        dockerBuildPush()
+        // Skip deploy for dev branches
     } else if (vars.REPO_BRANCH.contains('beta')) {
         echo "Beta mode - full pipeline"
-        cicdPipeline()
+        k8sGetConfig()
+        dockerBuildPush()
+        k8sSetImage()
     } else if (vars.REPO_BRANCH == 'main') {
         echo "Production mode - with monitoring"
-        cicdPipeline()
+        k8sGetConfig()
+        dockerBuildPush()
+        k8sSetImage()
 
         // Additional monitoring for production
         sh "kubectl get pods -n ${vars.NAMESPACE} -l app=${vars.APP_NAME}"

@@ -11,13 +11,18 @@ Thư viện chung Jenkins cung cấp các hàm tiện ích cho CI/CD pipeline v�
 pipeline {
   agent { label 'your-agent' }
   stages {
-    stage('CI/CD') {
-      steps {
-        script {
-          cicdPipeline()  // Thực hiện toàn bộ CI/CD tự động
-        }
-      }
+    stage('Get Config') {
+      steps { script { k8sGetConfig() } }
     }
+    stage('Build & Push') {
+      steps { script { dockerBuildPush() } }
+    }
+    stage('Deploy') {
+      steps { script { k8sSetImage() } }
+    }
+  }
+  post {
+    always { script { telegramNotify() } }
   }
 }
 ```
@@ -316,35 +321,26 @@ script {
 }
 ```
 
-### cicdPipeline
-Thực hiện toàn bộ quy trình CI/CD trong một hàm duy nhất.
+### k8sSetImage
+Cập nhật Kubernetes deployment với Docker image mới.
 
 **Tham số (tất cả tùy chọn):**
+- `deployment`: Tên deployment (mặc định: auto từ getProjectVars)
+- `image`: Docker image name (mặc định: auto từ getProjectVars)
+- `tag`: Image tag (mặc định: commit hash)
+- `namespace`: Kubernetes namespace (mặc định: auto từ getProjectVars)
+- `container`: Container name pattern (mặc định: '*' cho tất cả)
 - `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
-- `getConfigStage`: Bật/tắt stage lấy ConfigMap (mặc định: true)
-- `buildStage`: Bật/tắt stage build & push (mặc định: true)
-- `deployStage`: Bật/tắt stage deploy (mặc định: true)
-- `getConfigStageName`: Tên stage lấy config (mặc định: 'K8s get Configmap')
-- `buildStageName`: Tên stage build (mặc định: 'Build & Push')
-- `deployStageName`: Tên stage deploy (mặc định: 'Deploy')
-
-**Quy trình tự động:**
-1. **K8s get Configmap**: Lấy Dockerfile và .env từ ConfigMap theo branch
-2. **Build & Push**: Build Docker image và push lên registry
-3. **Deploy**: Cập nhật Kubernetes deployment với image mới
 
 **Ví dụ:**
 ```groovy
-// Hoàn toàn tự động - thực hiện toàn bộ CI/CD
-cicdPipeline()
+// Hoàn toàn tự động
+k8sSetImage()
 
-// Chỉ build và deploy (bỏ qua lấy config)
-cicdPipeline(getConfigStage: false)
-
-// Custom stage names
-cicdPipeline(
-    buildStageName: 'Docker Build & Push',
-    deployStageName: 'Kubernetes Deploy'
+// Custom image và tag
+k8sSetImage(
+    image: "my-registry/my-app",
+    tag: "v1.2.3"
 )
 ```
 
