@@ -24,11 +24,11 @@ def call(Map args = [:]) {
 
     // Get all keys from this ConfigMap if items not specified
     if (!items) {
-      // Get all keys using kubectl describe (more reliable)
+      // Get only data keys (skip metadata)
       def keysList = sh(
         script: """
         if kubectl get configmap '${cm}' -n '${ns}' >/dev/null 2>&1; then
-          kubectl describe configmap '${cm}' -n '${ns}' | grep '^[a-zA-Z0-9].*:' | awk -F':' '{print \$1}' | sort -u || true
+          kubectl describe configmap '${cm}' -n '${ns}' | awk '/^Data$/,/^Events:/ {if(/^[a-zA-Z0-9_.-]+:/ && !/^Data:/ && !/^Events:/) print \$1}' | sed 's/:$//' | sort -u || true
         fi
         """,
         returnStdout: true
@@ -36,7 +36,7 @@ def call(Map args = [:]) {
 
       if (keysList) {
         keysList.split('\n').each { String key ->
-          if (key && key.trim() && !key.trim().startsWith('Name:') && !key.trim().startsWith('Namespace:')) {
+          if (key && key.trim()) {
             fetchConfigKey(ns, cm, key.trim(), key.trim())
           }
         }
