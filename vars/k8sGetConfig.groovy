@@ -70,9 +70,9 @@ def fetchConfigKey(String ns, String cm, String key, String destPath) {
 
       tmp=\$(mktemp)
 
-      # Check if key exists in configmap first
+      # Check if key exists in configmap first - use go-template for keys with special chars
       if ! kubectl get configmap '${cm}' -n '${ns}' \\
-           -o jsonpath="{.data.${key}}" > "\$tmp" 2>/dev/null; then
+           -o go-template='{{index .data "'${key}'"}}' > "\$tmp" 2>/dev/null; then
         echo "[WARN] ConfigMap '${cm}' not found or key '${key}' missing, skipping..." >&2
         rm -f "\$tmp"
         exit 0
