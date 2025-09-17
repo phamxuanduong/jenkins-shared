@@ -47,6 +47,38 @@ docker context ls
 docker --context docker-swarm node ls
 ```
 
+### Registry Authentication
+
+**Private Registry Setup:**
+Function tự động sử dụng `--with-registry-auth` flag để Swarm nodes có thể pull từ private registries.
+
+```bash
+# Đảm bảo Docker daemon trên manager node đã login
+docker login 192.168.1.10
+
+# Hoặc login với credentials
+echo "password" | docker login 192.168.1.10 -u username --password-stdin
+
+# Verify registry access
+docker pull 192.168.1.10/your-image:tag
+```
+
+**Jenkins Setup:**
+```groovy
+// Login to registry trong Jenkins pipeline
+withCredentials([usernamePassword(
+    credentialsId: 'docker-registry-creds',
+    usernameVariable: 'DOCKER_USER',
+    passwordVariable: 'DOCKER_PASS'
+)]) {
+    sh """
+    echo \$DOCKER_PASS | docker --context docker-swarm login 192.168.1.10 -u \$DOCKER_USER --password-stdin
+    """
+
+    // Sau đó deploy
+    swarmSetImage()
+}
+
 ## Ví dụ sử dụng
 
 ### Basic usage (auto-detect)
@@ -56,12 +88,32 @@ script {
         // Build và push image trước
         dockerBuildPush()
 
-        // Update Swarm service tự động
+        // Update Swarm service tự động (với registry auth)
         swarmSetImage()
 
     } catch (Exception e) {
         echo "Deployment failed: ${e.getMessage()}"
         throw e
+    }
+}
+```
+
+### With registry authentication
+```groovy
+script {
+    withCredentials([usernamePassword(
+        credentialsId: 'docker-registry-creds',
+        usernameVariable: 'DOCKER_USER',
+        passwordVariable: 'DOCKER_PASS'
+    )]) {
+        // Login to private registry
+        sh """
+        echo \$DOCKER_PASS | docker --context docker-swarm login 192.168.1.10 -u \$DOCKER_USER --password-stdin
+        """
+
+        // Build, push và deploy
+        dockerBuildPush()
+        swarmSetImage()
     }
 }
 ```
@@ -225,12 +277,13 @@ script {
 ```groovy
 script {
     def vars = getProjectVars()
-    def serviceName = "${vars.REPO_NAME}_${vars.REPO_BRANCH}"
+    def serviceName = "${vars.REPO_NAME}_${vars.SANITIZED_BRANCH}"
     def imageTag = "${vars.REGISTRY}/${vars.APP_NAME}:${vars.COMMIT_HASH}"
 
     // Custom update with additional options
     sh """
     docker --context docker-swarm service update \\
+      --with-registry-auth \\
       --image ${imageTag} \\
       --update-parallelism 1 \\
       --update-delay 10s \\
@@ -309,6 +362,21 @@ docker --context docker-swarm node ls
 
 # Verify certificates and keys
 ls -la ~/.docker/contexts/docker-swarm/
+```
+
+#### Registry authentication failed
+**Error:** `failed to resolve reference` hoặc `pull access denied`
+
+**Solution:**
+```bash
+# Login to registry on manager node
+docker --context docker-swarm login 192.168.1.10
+
+# Test image pull
+docker --context docker-swarm pull 192.168.1.10/your-image:tag
+
+# Ensure --with-registry-auth is used (function does this automatically)
+docker --context docker-swarm service update --with-registry-auth --image image:tag service-name
 ```
 
 ### Debug Commands

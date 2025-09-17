@@ -45,8 +45,8 @@ def call(Map args = [:]) {
         exit 1
       fi
 
-      # Update service with new image
-      docker --context ${context} service update --image ${image}:${tag} ${service}
+      # Update service with new image (with registry auth for private registries)
+      docker --context ${context} service update --with-registry-auth --image ${image}:${tag} ${service}
 
       echo "[SUCCESS] swarmSetImage: Updated service '${service}' with image '${image}:${tag}'"
 
