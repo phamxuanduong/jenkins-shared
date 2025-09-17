@@ -52,6 +52,7 @@ pipeline {
 
 ### Detailed Documentation
 - **[telegramNotify](./docs/telegramNotify.md)** - Telegram notifications với rich formatting
+- **[swarmSetImage](./docs/swarmSetImage.md)** - Docker Swarm service deployment
 - **[k8sGetConfig](./docs/k8sGetConfig.md)** - ConfigMap management với dual ConfigMap support
 - **[getProjectVars](./docs/getProjectVars.md)** - Auto-detect project variables từ Git
 - **[Docker Functions](./docs/docker-functions.md)** - Build và push Docker images
@@ -344,6 +345,23 @@ k8sSetImage(
 )
 ```
 
+### swarmSetImage 🐳
+**Deploy tới Docker Swarm cluster**
+
+```groovy
+// Auto-detect service name: {repoName}_{repoBranch}
+swarmSetImage()
+
+// Custom service name
+swarmSetImage(
+    service: "my-custom-service",
+    context: "production-swarm"
+)
+
+// Complete Swarm deployment
+dockerBuildPush()  // Build và push image
+swarmSetImage()    // Update Swarm service
+```
 
 ## Jenkinsfile hoàn chỉnh
 
@@ -416,10 +434,18 @@ pipeline {
       }
     }
 
-    stage('Deploy') {
+    stage('Deploy to K8s') {
       steps {
         script {
           k8sSetImage()
+        }
+      }
+    }
+
+    stage('Deploy to Swarm') {
+      steps {
+        script {
+          swarmSetImage()
         }
       }
     }
