@@ -2,7 +2,7 @@
  * swarmSetImage - Update Docker Swarm service with new container image
  *
  * @param args Map of optional parameters:
- *   - service: Service name (default: "{repoName}_{repoBranch}" from getProjectVars)
+ *   - service: Service name (default: "{repoName}_{sanitizedBranch}" from getProjectVars)
  *   - image: Docker image name (default: auto from getProjectVars)
  *   - tag: Image tag (default: commit hash)
  *   - context: Docker context name (default: 'docker-swarm')
@@ -15,7 +15,7 @@ def call(Map args = [:]) {
   // Get project vars if not provided
   def vars = args.vars ?: getProjectVars()
 
-  String service = args.service ?: "${vars.REPO_NAME}_${vars.REPO_BRANCH}"
+  String service = args.service ?: "${vars.REPO_NAME}_${vars.SANITIZED_BRANCH}"
   String image = args.image ?: "${vars.REGISTRY}/${vars.APP_NAME}"
   String tag = args.tag ?: vars.COMMIT_HASH
   String context = args.context ?: 'docker-swarm'

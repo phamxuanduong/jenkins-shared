@@ -349,7 +349,7 @@ k8sSetImage(
 **Deploy tới Docker Swarm cluster**
 
 ```groovy
-// Auto-detect service name: {repoName}_{repoBranch}
+// Auto-detect service name: {repoName}_{sanitizedBranch}
 swarmSetImage()
 
 // Custom service name

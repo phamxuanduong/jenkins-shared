@@ -5,7 +5,7 @@ Cập nhật Docker Swarm service với image mới. Function tự động detec
 ## Tham số
 
 **Tất cả tham số đều tùy chọn:**
-- `service`: Tên service (mặc định: `{REPO_NAME}_{REPO_BRANCH}` từ getProjectVars)
+- `service`: Tên service (mặc định: `{REPO_NAME}_{SANITIZED_BRANCH}` từ getProjectVars)
 - `image`: Docker image name (mặc định: auto từ getProjectVars)
 - `tag`: Image tag (mặc định: commit hash)
 - `context`: Docker context name (mặc định: 'docker-swarm')
@@ -15,7 +15,7 @@ Cập nhật Docker Swarm service với image mới. Function tự động detec
 
 Function sử dụng naming pattern của Docker Swarm:
 ```
-Service Name = {REPO_NAME}_{REPO_BRANCH}
+Service Name = {REPO_NAME}_{SANITIZED_BRANCH}
 ```
 
 ### Examples:
@@ -26,8 +26,8 @@ Service Name: my-app_beta-api
 # Repository: user-service, Branch: main
 Service Name: user-service_main
 
-# Repository: payment-gateway, Branch: staging
-Service Name: payment-gateway_staging
+# Repository: payment-gateway, Branch: prod/worker-data
+Service Name: payment-gateway_prod-worker-data
 ```
 
 ## Required Setup
