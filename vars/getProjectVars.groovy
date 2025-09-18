@@ -115,9 +115,9 @@ def call(Map config = [:]) {
     def blockMessage = """
 🚫 *Deployment Blocked*
 
-📦 *Repository:* \`${permissionCheck.repository ?: "${vars.REPO_NAME}"}\`
-🌿 *Branch:* \`${vars.REPO_BRANCH}\`
-👤 *User:* \`${vars.GIT_USER}\`
+📦 *Repository:* `${permissionCheck.repository ?: "${vars.REPO_NAME}"}`
+🌿 *Branch:* `${vars.REPO_BRANCH}`
+👤 *User:* `${vars.GIT_USER}`
 
 ❌ *Reason:* ${getBlockedReasonMessage(permissionCheck)}
 
