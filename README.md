@@ -43,14 +43,17 @@ pipeline {
 ## 🎯 Tính năng chính
 
 - **Hoàn toàn tự động**: Tất cả hàm có thể gọi không cần tham số
+- **🔒 Branch Protection**: Tự động kiểm tra GitHub branch protection và user permissions
 - **Dual ConfigMap**: Hỗ trợ ConfigMap `general` (chung) và branch-specific
 - **Smart registry**: Tự động chọn registry theo branch pattern
 - **Branch sanitization**: Tự động xử lý branch names cho Kubernetes
 - **Override linh hoạt**: Có thể override bất kỳ tham số nào khi cần
+- **📱 Security Alerts**: Telegram notifications khi deployment bị block
 
 ## 📚 Documentation
 
 ### Detailed Documentation
+- **[githubApi](./docs/githubApi.md)** - 🔒 GitHub API integration với branch protection và permission checks
 - **[telegramNotify](./docs/telegramNotify.md)** - Telegram notifications với rich formatting
 - **[swarmSetImage](./docs/swarmSetImage.md)** - Docker Swarm service deployment
 - **[k8sGetConfig](./docs/k8sGetConfig.md)** - ConfigMap management với dual ConfigMap support
@@ -507,6 +510,63 @@ REGISTRY_PROD=registry-prod.company.com
 - **Error Resilient**: Graceful handling của missing resources
 - **Debug Friendly**: Chi tiết logs và troubleshooting guides
 - **Kubernetes Native**: Tuân thủ K8s naming conventions
+
+## 🔒 Security & Permissions
+
+### Branch Protection Integration
+
+Jenkins Shared Library tự động kiểm tra GitHub branch protection và user permissions:
+
+```groovy
+@Library('jenkins-shared@main') _
+
+pipeline {
+  agent { label 'beta' }
+
+  stages {
+    stage('Setup') {
+      steps {
+        script {
+          // Permission check tự động ở đây
+          VARS = getProjectVars()
+          // Pipeline sẽ dừng nếu user không có quyền
+        }
+      }
+    }
+    // ... stages khác sẽ bị skip nếu không có quyền
+  }
+}
+```
+
+### Required Environment Variables
+
+```bash
+# GitHub API access (required cho permission checks)
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Telegram notifications (từ telegramNotify)
+TELEGRAM_BOT_TOKEN_BETA=123456789:ABCDEFghijklmnopqrstuvwxyz123456789
+TELEGRAM_CHAT_ID_BETA=-1001234567890
+```
+
+### Security Features
+
+- **🔍 Branch Protection Detection**: Tự động detect protected branches
+- **👤 User Permission Validation**: Kiểm tra admin access của user
+- **🚫 Automatic Pipeline Blocking**: Dừng deployment khi không đủ quyền
+- **📱 Security Alerts**: Telegram notification khi bị block
+- **🛡️ Graceful Fallback**: Cho phép deploy nếu GitHub API không khả dụng
+
+### Permission Scenarios
+
+```
+✅ Protected branch + Admin user → Deploy allowed
+🚫 Protected branch + Non-admin user → Deploy blocked + Alert sent
+✅ Non-protected branch + Any user → Deploy allowed
+✅ No GitHub token configured → Deploy allowed (fallback)
+```
+
+Chi tiết: **[GitHub API Documentation](./docs/githubApi.md)**
 
 ## 🆘 Need Help?
 

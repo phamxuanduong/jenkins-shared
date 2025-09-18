@@ -9,8 +9,9 @@
  *   - appName: Application name (default: "{repoName}-{sanitizedBranch}")
  *   - registry: Docker registry (default: auto-select based on branch)
  *   - commitHash: Git commit hash (default: env.GIT_COMMIT?.take(7))
+ *   - skipPermissionCheck: Skip GitHub permission validation (default: false)
  *
- * @return Map containing project variables
+ * @return Map containing project variables and permission status
  */
 def call(Map config = [:]) {
   // Extract repository info from GIT_URL
@@ -62,18 +63,100 @@ def call(Map config = [:]) {
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
   ]
 
+  // Perform GitHub permission validation unless explicitly skipped
+  def permissionCheck = [canDeploy: true, reason: 'SKIPPED']
+  if (!config.skipPermissionCheck) {
+    try {
+      permissionCheck = githubApi('validateDeployPermissions', [
+        repoName: finalRepoName,
+        branchName: branchName
+      ])
+
+      // Add permission info to vars
+      vars.PERMISSION_CHECK = permissionCheck
+      vars.CAN_DEPLOY = permissionCheck.canDeploy
+      vars.PERMISSION_REASON = permissionCheck.reason
+      vars.GIT_USER = permissionCheck.username ?: 'unknown'
+
+    } catch (Exception e) {
+      echo "[WARN] getProjectVars: Permission check failed: ${e.getMessage()}"
+      // Default to allow deployment if permission check fails
+      permissionCheck = [canDeploy: true, reason: 'PERMISSION_CHECK_FAILED']
+      vars.PERMISSION_CHECK = permissionCheck
+      vars.CAN_DEPLOY = true
+      vars.PERMISSION_REASON = 'PERMISSION_CHECK_FAILED'
+      vars.GIT_USER = 'unknown'
+    }
+  } else {
+    vars.PERMISSION_CHECK = permissionCheck
+    vars.CAN_DEPLOY = true
+    vars.PERMISSION_REASON = 'SKIPPED'
+    vars.GIT_USER = 'unknown'
+  }
+
   // Log all variables for debugging
   echo """
 [INFO] getProjectVars: Project Variables:
-  REPO_NAME:     ${vars.REPO_NAME}
-  REPO_BRANCH:   ${vars.REPO_BRANCH}
-  SANITIZED_BRANCH: ${sanitizedBranch}
-  NAMESPACE:     ${vars.NAMESPACE}
-  DEPLOYMENT:    ${vars.DEPLOYMENT}
-  APP_NAME:      ${vars.APP_NAME}
-  REGISTRY:      ${vars.REGISTRY} (auto-selected based on branch)
-  COMMIT_HASH:   ${vars.COMMIT_HASH}
+  REPO_NAME:        ${vars.REPO_NAME}
+  REPO_BRANCH:      ${vars.REPO_BRANCH}
+  SANITIZED_BRANCH: ${vars.SANITIZED_BRANCH}
+  NAMESPACE:        ${vars.NAMESPACE}
+  DEPLOYMENT:       ${vars.DEPLOYMENT}
+  APP_NAME:         ${vars.APP_NAME}
+  REGISTRY:         ${vars.REGISTRY} (auto-selected based on branch)
+  COMMIT_HASH:      ${vars.COMMIT_HASH}
+  GIT_USER:         ${vars.GIT_USER}
+  CAN_DEPLOY:       ${vars.CAN_DEPLOY}
+  PERMISSION_REASON: ${vars.PERMISSION_REASON}
 """
 
+  // If deployment is blocked, notify and stop the pipeline
+  if (!vars.CAN_DEPLOY) {
+    def blockMessage = """
+🚫 *Deployment Blocked*
+
+📦 *Repository:* \`${permissionCheck.repository ?: "${vars.REPO_NAME}"}\`
+🌿 *Branch:* \`${vars.REPO_BRANCH}\`
+👤 *User:* \`${vars.GIT_USER}\`
+
+❌ *Reason:* ${getBlockedReasonMessage(permissionCheck)}
+
+🔒 This branch is protected and requires admin permissions to deploy.
+Please contact a repository administrator or use a pull request workflow.
+
+🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
+"""
+
+    // Send Telegram notification about blocked deployment
+    try {
+      telegramNotify([
+        message: blockMessage,
+        failOnError: false
+      ])
+    } catch (Exception e) {
+      echo "[WARN] getProjectVars: Failed to send blocked deployment notification: ${e.getMessage()}"
+    }
+
+    error "Deployment blocked: ${permissionCheck.reason} - User '${vars.GIT_USER}' does not have admin permissions for protected branch '${vars.REPO_BRANCH}'"
+  }
+
   return vars
+}
+
+/**
+ * Generate human-readable message for blocked deployment reason
+ */
+def getBlockedReasonMessage(permissionCheck) {
+  switch (permissionCheck.reason) {
+    case 'INSUFFICIENT_PERMISSIONS':
+      return "User does not have admin access to protected branch"
+    case 'BRANCH_PROTECTED':
+      return "Branch is protected and requires admin permissions"
+    case 'API_ERROR':
+      return "GitHub API error during permission check"
+    case 'API_EXCEPTION':
+      return "GitHub API exception during permission check"
+    default:
+      return "Unknown permission issue: ${permissionCheck.reason}"
+  }
 }

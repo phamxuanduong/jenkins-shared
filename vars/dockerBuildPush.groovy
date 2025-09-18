@@ -15,6 +15,13 @@ def call(Map args = [:]) {
   // Get project vars if not provided
   def vars = args.vars ?: getProjectVars()
 
+  // Check deployment permissions
+  if (!vars.CAN_DEPLOY) {
+    echo "[BLOCKED] dockerBuildPush: Deployment blocked due to insufficient permissions"
+    echo "[INFO] dockerBuildPush: User '${vars.GIT_USER}' cannot deploy to protected branch '${vars.REPO_BRANCH}'"
+    return
+  }
+
   String image = args.image ?: "${vars.REGISTRY}/${vars.APP_NAME}"
   String tag = args.tag ?: vars.COMMIT_HASH
   String dockerfile = args.dockerfile ?: 'Dockerfile'
