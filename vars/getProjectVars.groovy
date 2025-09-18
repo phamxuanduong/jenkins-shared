@@ -9,7 +9,7 @@
  *   - appName: Application name (default: "{repoName}-{sanitizedBranch}")
  *   - registry: Docker registry (default: auto-select based on branch)
  *   - commitHash: Git commit hash (default: env.GIT_COMMIT?.take(7))
- *   - enablePermissionCheck: Enable GitHub permission validation (default: auto-detect from PROTECTED_BRANCHES or GITHUB_TOKEN)
+ *   - enablePermissionCheck: Enable GitHub permission validation (default: auto-detect from GITHUB_TOKEN)
  *
  * @return Map containing project variables and permission status
  */
@@ -63,13 +63,13 @@ def call(Map config = [:]) {
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
   ]
 
-  // Auto-enable permission check if environment is configured or explicitly enabled
-  def hasPermissionConfig = env.PROTECTED_BRANCHES || env.GITHUB_TOKEN
-  def shouldCheckPermissions = config.enablePermissionCheck || (hasPermissionConfig && config.enablePermissionCheck != false)
+  // Auto-enable permission check if explicitly enabled or has GitHub token
+  def hasGitHubToken = env.GITHUB_TOKEN || env.GITHUB_APP_INSTALLATION_TOKEN
+  def shouldCheckPermissions = config.enablePermissionCheck || (hasGitHubToken && config.enablePermissionCheck != false)
 
   def permissionCheck = [canDeploy: true, reason: 'SKIPPED']
   if (shouldCheckPermissions) {
-    echo "[INFO] getProjectVars: GitHub permission validation enabled (config source: ${env.PROTECTED_BRANCHES ? 'PROTECTED_BRANCHES' : env.GITHUB_TOKEN ? 'GITHUB_TOKEN' : 'manual'})"
+    echo "[INFO] getProjectVars: GitHub permission validation enabled - checking for repository PROTECTED_BRANCHES variable"
     try {
       permissionCheck = githubApi('validateDeployPermissions', [
         repoName: finalRepoName,
@@ -92,7 +92,7 @@ def call(Map config = [:]) {
       vars.GIT_USER = 'unknown'
     }
   } else {
-    echo "[INFO] getProjectVars: GitHub permission validation disabled (no environment config or explicitly disabled)"
+    echo "[INFO] getProjectVars: GitHub permission validation disabled (no GitHub token or explicitly disabled)"
     vars.PERMISSION_CHECK = permissionCheck
     vars.CAN_DEPLOY = true
     vars.PERMISSION_REASON = 'SKIPPED'

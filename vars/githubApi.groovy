@@ -74,32 +74,85 @@ def checkUserPermissions(Map params) {
 }
 
 /**
- * Check branch protection using environment variables (for GitHub Free tier)
+ * Check branch protection using GitHub Repository Variables
  */
 def getBranchProtectionRules(Map params) {
+  def repoOwner = params.repoOwner ?: getRepoOwner()
+  def repoName = params.repoName ?: getRepoName()
   def branchName = params.branchName ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME
-  def protectedBranches = env.PROTECTED_BRANCHES ?: 'prod'
+  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
 
-  echo "[INFO] githubApi: Checking branch protection for '${branchName}' using environment config"
-  echo "[INFO] githubApi: Protected branches: ${protectedBranches}"
+  if (!token) {
+    echo "[WARN] githubApi: GITHUB_TOKEN not found, skipping branch protection check"
+    return [isProtected: false, reason: 'NO_TOKEN']
+  }
 
-  // Parse protected branches list
-  def protectedList = protectedBranches.split(',').collect { it.trim() }
-  def isProtected = protectedList.contains(branchName)
+  try {
+    echo "[INFO] githubApi: Fetching PROTECTED_BRANCHES from GitHub Repository Variables for ${repoOwner}/${repoName}"
 
-  if (isProtected) {
-    echo "[INFO] githubApi: Branch '${branchName}' is in protected branches list"
-    return [
-      isProtected: true,
-      branchName: branchName,
-      reason: 'ENV_CONFIG_PROTECTED'
-    ]
-  } else {
-    echo "[INFO] githubApi: Branch '${branchName}' is not in protected branches list"
+    // Fetch GitHub Repository Variables
+    def response = ''
+    withEnv(["GITHUB_API_URL=https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/PROTECTED_BRANCHES"]) {
+      response = sh(
+        script: '''
+        curl -s -H "Authorization: token ${GITHUB_TOKEN}" \\
+             -H "Accept: application/vnd.github.v3+json" \\
+             "${GITHUB_API_URL}"
+        ''',
+        returnStdout: true
+      ).trim()
+    }
+
+    def jsonResponse = readJSON text: response
+
+    if (jsonResponse.name == 'PROTECTED_BRANCHES' && jsonResponse.value) {
+      def protectedBranches = jsonResponse.value
+      echo "[INFO] githubApi: Found PROTECTED_BRANCHES: ${protectedBranches}"
+
+      // Parse protected branches list
+      def protectedList = protectedBranches.split(',').collect { it.trim() }
+      def isProtected = protectedList.contains(branchName)
+
+      if (isProtected) {
+        echo "[INFO] githubApi: Branch '${branchName}' is in protected branches list"
+        return [
+          isProtected: true,
+          branchName: branchName,
+          protectedBranches: protectedBranches,
+          reason: 'GITHUB_VAR_PROTECTED'
+        ]
+      } else {
+        echo "[INFO] githubApi: Branch '${branchName}' is not in protected branches list"
+        return [
+          isProtected: false,
+          branchName: branchName,
+          protectedBranches: protectedBranches,
+          reason: 'GITHUB_VAR_NOT_PROTECTED'
+        ]
+      }
+
+    } else if (jsonResponse.message && jsonResponse.message.contains('Not Found')) {
+      echo "[INFO] githubApi: PROTECTED_BRANCHES variable not found in repository - skipping protection check"
+      return [
+        isProtected: false,
+        branchName: branchName,
+        reason: 'NO_PROTECTED_BRANCHES_VAR'
+      ]
+    } else {
+      echo "[WARN] githubApi: Unexpected response for repository variables: ${response}"
+      return [
+        isProtected: false,
+        branchName: branchName,
+        reason: 'API_ERROR'
+      ]
+    }
+
+  } catch (Exception e) {
+    echo "[ERROR] githubApi: Failed to fetch repository variables: ${e.getMessage()}"
     return [
       isProtected: false,
       branchName: branchName,
-      reason: 'ENV_CONFIG_NOT_PROTECTED'
+      reason: 'API_EXCEPTION'
     ]
   }
 }
@@ -126,12 +179,13 @@ def validateDeployPermissions(Map params = [:]) {
     branchName: branchName
   ])
 
-  // If branch is not protected, allow deployment
+  // If branch is not protected or no PROTECTED_BRANCHES variable, allow deployment
   if (!branchProtection.isProtected) {
-    echo "[INFO] githubApi: Branch '${branchName}' is not protected, allowing deployment"
+    def reason = branchProtection.reason == 'NO_PROTECTED_BRANCHES_VAR' ? 'NO_PROTECTED_BRANCHES_VAR' : 'BRANCH_NOT_PROTECTED'
+    echo "[INFO] githubApi: ${reason == 'NO_PROTECTED_BRANCHES_VAR' ? 'No PROTECTED_BRANCHES variable found' : 'Branch not protected'}, allowing deployment"
     return [
       canDeploy: true,
-      reason: 'BRANCH_NOT_PROTECTED',
+      reason: reason,
       branchProtection: branchProtection,
       username: username,
       branchName: branchName,
