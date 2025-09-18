@@ -36,14 +36,17 @@ def checkUserPermissions(Map params) {
     echo "[INFO] githubApi: Checking permissions for user '${username}' on ${repoOwner}/${repoName}"
 
     // Get user's repository permissions (hide token in logs)
-    def response = sh(
-      script: """
-      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
-           -H "Accept: application/vnd.github.v3+json" \\
-           "https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"
-      """,
-      returnStdout: true
-    ).trim()
+    def response = ''
+    withEnv(["GITHUB_API_URL=https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"]) {
+      response = sh(
+        script: '''
+        curl -s -H "Authorization: token ${GITHUB_TOKEN}" \\
+             -H "Accept: application/vnd.github.v3+json" \\
+             "${GITHUB_API_URL}"
+        ''',
+        returnStdout: true
+      ).trim()
+    }
 
     def jsonResponse = readJSON text: response
 
@@ -75,7 +78,7 @@ def checkUserPermissions(Map params) {
  */
 def getBranchProtectionRules(Map params) {
   def branchName = params.branchName ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME
-  def protectedBranches = env.PROTECTED_BRANCHES ?: 'main,master,production,prod'
+  def protectedBranches = env.PROTECTED_BRANCHES ?: 'prod'
 
   echo "[INFO] githubApi: Checking branch protection for '${branchName}' using environment config"
   echo "[INFO] githubApi: Protected branches: ${protectedBranches}"
