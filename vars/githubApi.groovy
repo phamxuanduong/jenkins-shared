@@ -1,7 +1,7 @@
 /**
  * githubApi - GitHub API utility functions for permissions and branch protection
  *
- * @param action String: The action to perform ('checkPermissions', 'getBranchProtection', 'getUser')
+ * @param action String: The action to perform ('checkPermissions', 'getBranchProtection', 'validateDeployPermissions')
  * @param params Map: Parameters specific to each action
  * @return Mixed: Result based on action
  */
@@ -11,8 +11,6 @@ def call(String action, Map params = [:]) {
       return checkUserPermissions(params)
     case 'getBranchProtection':
       return getBranchProtectionRules(params)
-    case 'getUser':
-      return getUserInfo(params)
     case 'validateDeployPermissions':
       return validateDeployPermissions(params)
     default:
@@ -21,148 +19,74 @@ def call(String action, Map params = [:]) {
 }
 
 /**
- * Check if user has admin permissions on repository
+ * Check if user has admin permissions using environment variables (for GitHub Free tier)
  */
 def checkUserPermissions(Map params) {
-  def repoOwner = params.repoOwner ?: getRepoOwner()
-  def repoName = params.repoName ?: getRepoName()
   def username = params.username ?: getUserFromCommit()
-  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
+  def adminUsers = env.GITHUB_ADMIN_USERS ?: ''
 
-  if (!token) {
-    echo "[WARN] githubApi: GITHUB_TOKEN not found, skipping permission check"
-    return [hasAdminAccess: true, reason: 'NO_TOKEN'] // Allow if no token configured
+  echo "[INFO] githubApi: Checking permissions for user '${username}' using environment config"
+  echo "[INFO] githubApi: Admin users list: ${adminUsers ?: 'not configured'}"
+
+  if (!adminUsers || adminUsers.trim() == '') {
+    echo "[WARN] githubApi: GITHUB_ADMIN_USERS not configured, allowing deployment"
+    return [hasAdminAccess: true, reason: 'NO_ADMIN_LIST'] // Allow if no admin list
   }
 
-  try {
-    echo "[INFO] githubApi: Checking permissions for user '${username}' on ${repoOwner}/${repoName}"
+  // Parse admin users list
+  def adminList = adminUsers.split(',').collect { it.trim() }
+  def hasAdmin = adminList.contains(username)
 
-    // Get user's repository permissions (hide token in logs)
-    def response = sh(
-      script: """
-      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
-           -H "Accept: application/vnd.github.v3+json" \\
-           "https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"
-      """,
-      returnStdout: true
-    ).trim()
-
-    def jsonResponse = readJSON text: response
-
-    if (jsonResponse.permission) {
-      def permission = jsonResponse.permission
-      def hasAdmin = permission == 'admin'
-
-      echo "[INFO] githubApi: User '${username}' has '${permission}' permission"
-
-      return [
-        hasAdminAccess: hasAdmin,
-        permission: permission,
-        username: username,
-        reason: hasAdmin ? 'ADMIN_ACCESS' : 'INSUFFICIENT_PERMISSION'
-      ]
-    } else {
-      echo "[WARN] githubApi: Could not determine user permissions: ${response}"
-      return [hasAdminAccess: true, reason: 'API_ERROR'] // Allow if API fails
-    }
-
-  } catch (Exception e) {
-    echo "[ERROR] githubApi: Failed to check permissions: ${e.getMessage()}"
-    return [hasAdminAccess: true, reason: 'API_EXCEPTION'] // Allow if exception occurs
+  if (hasAdmin) {
+    echo "[INFO] githubApi: User '${username}' is in admin users list"
+    return [
+      hasAdminAccess: true,
+      permission: 'admin',
+      username: username,
+      reason: 'ENV_CONFIG_ADMIN'
+    ]
+  } else {
+    echo "[WARN] githubApi: User '${username}' is not in admin users list"
+    return [
+      hasAdminAccess: false,
+      permission: 'user',
+      username: username,
+      reason: 'ENV_CONFIG_NOT_ADMIN'
+    ]
   }
 }
 
 /**
- * Get branch protection rules for repository
+ * Check branch protection using environment variables (for GitHub Free tier)
  */
 def getBranchProtectionRules(Map params) {
-  def repoOwner = params.repoOwner ?: getRepoOwner()
-  def repoName = params.repoName ?: getRepoName()
   def branchName = params.branchName ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME
-  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
+  def protectedBranches = env.GITHUB_PROTECTED_BRANCHES ?: 'main,master,production,prod'
 
-  if (!token) {
-    echo "[WARN] githubApi: GITHUB_TOKEN not found, skipping branch protection check"
-    return [isProtected: false, reason: 'NO_TOKEN']
-  }
+  echo "[INFO] githubApi: Checking branch protection for '${branchName}' using environment config"
+  echo "[INFO] githubApi: Protected branches: ${protectedBranches}"
 
-  try {
-    echo "[INFO] githubApi: Checking branch protection for '${branchName}' on ${repoOwner}/${repoName}"
+  // Parse protected branches list
+  def protectedList = protectedBranches.split(',').collect { it.trim() }
+  def isProtected = protectedList.contains(branchName)
 
-    // Check if specific branch has protection rules (hide token in logs)
-    def response = sh(
-      script: """
-      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
-           -H "Accept: application/vnd.github.v3+json" \\
-           "https://api.github.com/repos/${repoOwner}/${repoName}/branches/${branchName}/protection"
-      """,
-      returnStdout: true
-    ).trim()
-
-    def jsonResponse = readJSON text: response
-
-    if (jsonResponse.url) {
-      // Branch is protected
-      echo "[INFO] githubApi: Branch '${branchName}' is protected"
-
-      return [
-        isProtected: true,
-        branchName: branchName,
-        protectionRules: jsonResponse,
-        reason: 'BRANCH_PROTECTED'
-      ]
-    } else if (jsonResponse.message && jsonResponse.message.contains('Branch not protected')) {
-      // Branch is not protected
-      echo "[INFO] githubApi: Branch '${branchName}' is not protected"
-      return [isProtected: false, reason: 'NOT_PROTECTED']
-    } else if (jsonResponse.status == "403" && jsonResponse.message && jsonResponse.message.contains('Upgrade to GitHub Pro')) {
-      // GitHub Free tier doesn't support branch protection API
-      echo "[INFO] githubApi: GitHub Free tier - branch protection API not available, assuming branch not protected"
-      return [isProtected: false, reason: 'FREE_TIER_NO_API']
-    } else {
-      echo "[WARN] githubApi: Unknown response for branch protection: ${response}"
-      return [isProtected: false, reason: 'API_ERROR']
-    }
-
-  } catch (Exception e) {
-    echo "[ERROR] githubApi: Failed to check branch protection: ${e.getMessage()}"
-    return [isProtected: false, reason: 'API_EXCEPTION']
-  }
-}
-
-/**
- * Get user information from commit
- */
-def getUserInfo(Map params) {
-  def username = params.username ?: getUserFromCommit()
-  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
-
-  if (!token) {
-    return [username: username, reason: 'NO_TOKEN']
-  }
-
-  try {
-    def response = sh(
-      script: """
-      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
-           -H "Accept: application/vnd.github.v3+json" \\
-           "https://api.github.com/users/${username}"
-      """,
-      returnStdout: true
-    ).trim()
-
-    def jsonResponse = readJSON text: response
+  if (isProtected) {
+    echo "[INFO] githubApi: Branch '${branchName}' is in protected branches list"
     return [
-      username: username,
-      userInfo: jsonResponse,
-      reason: 'SUCCESS'
+      isProtected: true,
+      branchName: branchName,
+      reason: 'ENV_CONFIG_PROTECTED'
     ]
-
-  } catch (Exception e) {
-    echo "[ERROR] githubApi: Failed to get user info: ${e.getMessage()}"
-    return [username: username, reason: 'API_EXCEPTION']
+  } else {
+    echo "[INFO] githubApi: Branch '${branchName}' is not in protected branches list"
+    return [
+      isProtected: false,
+      branchName: branchName,
+      reason: 'ENV_CONFIG_NOT_PROTECTED'
+    ]
   }
 }
+
 
 /**
  * Perform comprehensive permission check

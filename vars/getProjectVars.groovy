@@ -63,13 +63,13 @@ def call(Map config = [:]) {
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
   ]
 
-  // Auto-enable permission check if GitHub token is available (from GitHub App or manual config)
-  def hasGitHubToken = env.GITHUB_TOKEN || env.GITHUB_APP_INSTALLATION_TOKEN
-  def shouldCheckPermissions = config.enablePermissionCheck || (hasGitHubToken && config.enablePermissionCheck != false)
+  // Auto-enable permission check if environment is configured or explicitly enabled
+  def hasPermissionConfig = env.GITHUB_PROTECTED_BRANCHES || env.GITHUB_ADMIN_USERS
+  def shouldCheckPermissions = config.enablePermissionCheck || (hasPermissionConfig && config.enablePermissionCheck != false)
 
   def permissionCheck = [canDeploy: true, reason: 'SKIPPED']
   if (shouldCheckPermissions) {
-    echo "[INFO] getProjectVars: GitHub permission validation enabled (token source: ${env.GITHUB_TOKEN ? 'GITHUB_TOKEN' : env.GITHUB_APP_INSTALLATION_TOKEN ? 'GITHUB_APP' : 'manual'})"
+    echo "[INFO] getProjectVars: GitHub permission validation enabled (config source: ${env.GITHUB_PROTECTED_BRANCHES ? 'PROTECTED_BRANCHES' : env.GITHUB_ADMIN_USERS ? 'ADMIN_USERS' : 'manual'})"
     try {
       permissionCheck = githubApi('validateDeployPermissions', [
         repoName: finalRepoName,
@@ -92,7 +92,7 @@ def call(Map config = [:]) {
       vars.GIT_USER = 'unknown'
     }
   } else {
-    echo "[INFO] getProjectVars: GitHub permission validation disabled (no token available or explicitly disabled)"
+    echo "[INFO] getProjectVars: GitHub permission validation disabled (no environment config or explicitly disabled)"
     vars.PERMISSION_CHECK = permissionCheck
     vars.CAN_DEPLOY = true
     vars.PERMISSION_REASON = 'SKIPPED'
