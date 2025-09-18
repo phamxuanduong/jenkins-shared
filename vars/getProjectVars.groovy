@@ -9,7 +9,7 @@
  *   - appName: Application name (default: "{repoName}-{sanitizedBranch}")
  *   - registry: Docker registry (default: auto-select based on branch)
  *   - commitHash: Git commit hash (default: env.GIT_COMMIT?.take(7))
- *   - skipPermissionCheck: Skip GitHub permission validation (default: false)
+ *   - enablePermissionCheck: Enable GitHub permission validation (default: false)
  *
  * @return Map containing project variables and permission status
  */
@@ -65,7 +65,7 @@ def call(Map config = [:]) {
 
   // Perform GitHub permission validation unless explicitly skipped
   def permissionCheck = [canDeploy: true, reason: 'SKIPPED']
-  if (!config.skipPermissionCheck) {
+  if (config.enablePermissionCheck) {
     try {
       permissionCheck = githubApi('validateDeployPermissions', [
         repoName: finalRepoName,

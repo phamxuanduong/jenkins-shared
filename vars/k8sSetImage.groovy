@@ -16,8 +16,8 @@ def call(Map args = [:]) {
   // Get project vars if not provided
   def vars = args.vars ?: getProjectVars()
 
-  // Check deployment permissions
-  if (!vars.CAN_DEPLOY) {
+  // Check deployment permissions (only if permission check is enabled)
+  if (vars.CAN_DEPLOY == false) {
     echo "[BLOCKED] k8sSetImage: Deployment blocked due to insufficient permissions"
     echo "[INFO] k8sSetImage: User '${vars.GIT_USER}' cannot deploy to protected branch '${vars.REPO_BRANCH}'"
     return

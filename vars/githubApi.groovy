@@ -13,6 +13,8 @@ def call(String action, Map params = [:]) {
       return getBranchProtectionRules(params)
     case 'getUser':
       return getUserInfo(params)
+    case 'validateDeployPermissions':
+      return validateDeployPermissions(params)
     default:
       error "githubApi: Unknown action '${action}'"
   }
