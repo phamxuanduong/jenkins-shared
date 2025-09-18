@@ -37,10 +37,10 @@ def checkUserPermissions(Map params) {
   try {
     echo "[INFO] githubApi: Checking permissions for user '${username}' on ${repoOwner}/${repoName}"
 
-    // Get user's repository permissions
+    // Get user's repository permissions (hide token in logs)
     def response = sh(
       script: """
-      curl -s -H "Authorization: token ${token}" \\
+      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
            -H "Accept: application/vnd.github.v3+json" \\
            "https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"
       """,
@@ -89,10 +89,10 @@ def getBranchProtectionRules(Map params) {
   try {
     echo "[INFO] githubApi: Checking branch protection for '${branchName}' on ${repoOwner}/${repoName}"
 
-    // Check if specific branch has protection rules
+    // Check if specific branch has protection rules (hide token in logs)
     def response = sh(
       script: """
-      curl -s -H "Authorization: token ${token}" \\
+      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
            -H "Accept: application/vnd.github.v3+json" \\
            "https://api.github.com/repos/${repoOwner}/${repoName}/branches/${branchName}/protection"
       """,
@@ -115,6 +115,10 @@ def getBranchProtectionRules(Map params) {
       // Branch is not protected
       echo "[INFO] githubApi: Branch '${branchName}' is not protected"
       return [isProtected: false, reason: 'NOT_PROTECTED']
+    } else if (jsonResponse.status == "403" && jsonResponse.message && jsonResponse.message.contains('Upgrade to GitHub Pro')) {
+      // GitHub Free tier doesn't support branch protection API
+      echo "[INFO] githubApi: GitHub Free tier - branch protection API not available, assuming branch not protected"
+      return [isProtected: false, reason: 'FREE_TIER_NO_API']
     } else {
       echo "[WARN] githubApi: Unknown response for branch protection: ${response}"
       return [isProtected: false, reason: 'API_ERROR']
@@ -140,7 +144,7 @@ def getUserInfo(Map params) {
   try {
     def response = sh(
       script: """
-      curl -s -H "Authorization: token ${token}" \\
+      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
            -H "Accept: application/vnd.github.v3+json" \\
            "https://api.github.com/users/${username}"
       """,
@@ -187,7 +191,10 @@ def validateDeployPermissions(Map params = [:]) {
     return [
       canDeploy: true,
       reason: 'BRANCH_NOT_PROTECTED',
-      branchProtection: branchProtection
+      branchProtection: branchProtection,
+      username: username,
+      branchName: branchName,
+      repository: "${repoOwner}/${repoName}"
     ]
   }
 
