@@ -9,7 +9,7 @@
  *   - appName: Application name (default: "{repoName}-{sanitizedBranch}")
  *   - registry: Docker registry (default: auto-select based on branch)
  *   - commitHash: Git commit hash (default: env.GIT_COMMIT?.take(7))
- *   - enablePermissionCheck: Enable GitHub permission validation (default: false)
+ *   - enablePermissionCheck: Enable GitHub permission validation (default: auto-detect from GitHub token)
  *
  * @return Map containing project variables and permission status
  */
@@ -63,9 +63,13 @@ def call(Map config = [:]) {
     COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
   ]
 
-  // Perform GitHub permission validation unless explicitly skipped
+  // Auto-enable permission check if GitHub token is available (from GitHub App or manual config)
+  def hasGitHubToken = env.GITHUB_TOKEN || env.GITHUB_APP_INSTALLATION_TOKEN
+  def shouldCheckPermissions = config.enablePermissionCheck || (hasGitHubToken && config.enablePermissionCheck != false)
+
   def permissionCheck = [canDeploy: true, reason: 'SKIPPED']
-  if (config.enablePermissionCheck) {
+  if (shouldCheckPermissions) {
+    echo "[INFO] getProjectVars: GitHub permission validation enabled (token source: ${env.GITHUB_TOKEN ? 'GITHUB_TOKEN' : env.GITHUB_APP_INSTALLATION_TOKEN ? 'GITHUB_APP' : 'manual'})"
     try {
       permissionCheck = githubApi('validateDeployPermissions', [
         repoName: finalRepoName,
@@ -88,6 +92,7 @@ def call(Map config = [:]) {
       vars.GIT_USER = 'unknown'
     }
   } else {
+    echo "[INFO] getProjectVars: GitHub permission validation disabled (no token available or explicitly disabled)"
     vars.PERMISSION_CHECK = permissionCheck
     vars.CAN_DEPLOY = true
     vars.PERMISSION_REASON = 'SKIPPED'

@@ -27,7 +27,7 @@ def checkUserPermissions(Map params) {
   def repoOwner = params.repoOwner ?: getRepoOwner()
   def repoName = params.repoName ?: getRepoName()
   def username = params.username ?: getUserFromCommit()
-  def token = params.token ?: env.GITHUB_TOKEN
+  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
 
   if (!token) {
     echo "[WARN] githubApi: GITHUB_TOKEN not found, skipping permission check"
@@ -79,7 +79,7 @@ def getBranchProtectionRules(Map params) {
   def repoOwner = params.repoOwner ?: getRepoOwner()
   def repoName = params.repoName ?: getRepoName()
   def branchName = params.branchName ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME
-  def token = params.token ?: env.GITHUB_TOKEN
+  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
 
   if (!token) {
     echo "[WARN] githubApi: GITHUB_TOKEN not found, skipping branch protection check"
@@ -131,7 +131,7 @@ def getBranchProtectionRules(Map params) {
  */
 def getUserInfo(Map params) {
   def username = params.username ?: getUserFromCommit()
-  def token = params.token ?: env.GITHUB_TOKEN
+  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
 
   if (!token) {
     return [username: username, reason: 'NO_TOKEN']
