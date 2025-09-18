@@ -9,7 +9,7 @@
  *   - appName: Application name (default: "{repoName}-{sanitizedBranch}")
  *   - registry: Docker registry (default: auto-select based on branch)
  *   - commitHash: Git commit hash (default: env.GIT_COMMIT?.take(7))
- *   - enablePermissionCheck: Enable GitHub permission validation (default: auto-detect from GitHub token)
+ *   - enablePermissionCheck: Enable GitHub permission validation (default: auto-detect from PROTECTED_BRANCHES or GITHUB_TOKEN)
  *
  * @return Map containing project variables and permission status
  */
@@ -64,12 +64,12 @@ def call(Map config = [:]) {
   ]
 
   // Auto-enable permission check if environment is configured or explicitly enabled
-  def hasPermissionConfig = env.GITHUB_PROTECTED_BRANCHES || env.GITHUB_ADMIN_USERS
+  def hasPermissionConfig = env.PROTECTED_BRANCHES || env.GITHUB_TOKEN
   def shouldCheckPermissions = config.enablePermissionCheck || (hasPermissionConfig && config.enablePermissionCheck != false)
 
   def permissionCheck = [canDeploy: true, reason: 'SKIPPED']
   if (shouldCheckPermissions) {
-    echo "[INFO] getProjectVars: GitHub permission validation enabled (config source: ${env.GITHUB_PROTECTED_BRANCHES ? 'PROTECTED_BRANCHES' : env.GITHUB_ADMIN_USERS ? 'ADMIN_USERS' : 'manual'})"
+    echo "[INFO] getProjectVars: GitHub permission validation enabled (config source: ${env.PROTECTED_BRANCHES ? 'PROTECTED_BRANCHES' : env.GITHUB_TOKEN ? 'GITHUB_TOKEN' : 'manual'})"
     try {
       permissionCheck = githubApi('validateDeployPermissions', [
         repoName: finalRepoName,
