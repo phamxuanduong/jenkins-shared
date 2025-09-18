@@ -35,18 +35,17 @@ def checkUserPermissions(Map params) {
   try {
     echo "[INFO] githubApi: Checking permissions for user '${username}' on ${repoOwner}/${repoName}"
 
-    // Get user's repository permissions (hide token in logs)
-    def response = ''
-    withEnv(["GITHUB_API_URL=https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"]) {
-      response = sh(
-        script: '''
-        curl -s -H "Authorization: token ${GITHUB_TOKEN}" \\
-             -H "Accept: application/vnd.github.v3+json" \\
-             "${GITHUB_API_URL}"
-        ''',
-        returnStdout: true
-      ).trim()
-    }
+    // Get user's repository permissions (hide command from logs)
+    def apiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"
+    def response = sh(
+      script: """
+      set +x
+      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
+           -H "Accept: application/vnd.github.v3+json" \\
+           "${apiUrl}"
+      """,
+      returnStdout: true
+    ).trim()
 
     def jsonResponse = readJSON text: response
 
@@ -90,18 +89,17 @@ def getBranchProtectionRules(Map params) {
   try {
     echo "[INFO] githubApi: Fetching PROTECTED_BRANCHES from GitHub Repository Variables for ${repoOwner}/${repoName}"
 
-    // Fetch GitHub Repository Variables
-    def response = ''
-    withEnv(["GITHUB_API_URL=https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/PROTECTED_BRANCHES"]) {
-      response = sh(
-        script: '''
-        curl -s -H "Authorization: token ${GITHUB_TOKEN}" \\
-             -H "Accept: application/vnd.github.v3+json" \\
-             "${GITHUB_API_URL}"
-        ''',
-        returnStdout: true
-      ).trim()
-    }
+    // Fetch GitHub Repository Variables (hide command from logs)
+    def apiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/PROTECTED_BRANCHES"
+    def response = sh(
+      script: """
+      set +x
+      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
+           -H "Accept: application/vnd.github.v3+json" \\
+           "${apiUrl}"
+      """,
+      returnStdout: true
+    ).trim()
 
     def jsonResponse = readJSON text: response
 
