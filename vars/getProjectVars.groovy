@@ -153,15 +153,17 @@ Please contact a repository administrator or use a pull request workflow.
  */
 def getBlockedReasonMessage(permissionCheck) {
   switch (permissionCheck.reason) {
+    case 'ADMIN_REQUIRED_BUT_NOT_ADMIN':
+      return "Branch requires ADMIN permission but user has '${permissionCheck.userPermissions?.permission ?: 'unknown'}' permission"
+    case 'MAINTAIN_OR_ADMIN_REQUIRED':
+      return "Branch requires MAINTAIN or ADMIN permission but user has '${permissionCheck.userPermissions?.permission ?: 'unknown'}' permission"
     case 'INSUFFICIENT_PERMISSIONS':
-      return "User does not have admin access to protected branch"
-    case 'BRANCH_PROTECTED':
-      return "Branch is protected and requires admin permissions"
+      return "User does not have sufficient permissions for protected branch"
     case 'API_ERROR':
       return "GitHub API error during permission check"
     case 'API_EXCEPTION':
       return "GitHub API exception during permission check"
     default:
-      return "Unknown permission issue: ${permissionCheck.reason}"
+      return "Permission issue: ${permissionCheck.reason}"
   }
 }

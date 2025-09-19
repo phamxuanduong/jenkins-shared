@@ -73,7 +73,7 @@ def checkUserPermissions(Map params) {
 }
 
 /**
- * Check branch protection using GitHub Repository Variables
+ * Check branch protection using GitHub Repository Variables with admin/maintain levels
  */
 def getBranchProtectionRules(Map params) {
   def repoOwner = params.repoOwner ?: getRepoOwner()
@@ -87,62 +87,96 @@ def getBranchProtectionRules(Map params) {
   }
 
   try {
-    echo "[INFO] githubApi: Fetching PROTECTED_BRANCHES from GitHub Repository Variables for ${repoOwner}/${repoName}"
+    echo "[INFO] githubApi: Fetching branch protection variables from GitHub Repository Variables for ${repoOwner}/${repoName}"
 
-    // Fetch GitHub Repository Variables (hide command from logs)
-    def apiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/PROTECTED_BRANCHES"
-    def response = sh(
+    // Fetch BRANCH_PROTECT_ADMIN variable
+    def adminApiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/BRANCH_PROTECT_ADMIN"
+    def adminResponse = sh(
       script: """
       set +x
       curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
            -H "Accept: application/vnd.github.v3+json" \\
-           "${apiUrl}"
+           "${adminApiUrl}"
       """,
       returnStdout: true
     ).trim()
 
-    def jsonResponse = readJSON text: response
+    // Fetch BRANCH_PROTECT_MAINTAIN variable
+    def maintainApiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/BRANCH_PROTECT_MAINTAIN"
+    def maintainResponse = sh(
+      script: """
+      set +x
+      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
+           -H "Accept: application/vnd.github.v3+json" \\
+           "${maintainApiUrl}"
+      """,
+      returnStdout: true
+    ).trim()
 
-    if (jsonResponse.name == 'PROTECTED_BRANCHES' && jsonResponse.value) {
-      def protectedBranches = jsonResponse.value
-      echo "[INFO] githubApi: Found PROTECTED_BRANCHES: ${protectedBranches}"
+    def adminJson = readJSON text: adminResponse
+    def maintainJson = readJSON text: maintainResponse
 
-      // Parse protected branches list
-      def protectedList = protectedBranches.split(',').collect { it.trim() }
-      def isProtected = protectedList.contains(branchName)
+    def adminBranches = []
+    def maintainBranches = []
 
-      if (isProtected) {
-        echo "[INFO] githubApi: Branch '${branchName}' is in protected branches list"
-        return [
-          isProtected: true,
-          branchName: branchName,
-          protectedBranches: protectedBranches,
-          reason: 'GITHUB_VAR_PROTECTED'
-        ]
-      } else {
-        echo "[INFO] githubApi: Branch '${branchName}' is not in protected branches list"
+    // Parse admin protected branches
+    if (adminJson.name == 'BRANCH_PROTECT_ADMIN' && adminJson.value) {
+      adminBranches = adminJson.value.split(',').collect { it.trim() }
+      echo "[INFO] githubApi: Found BRANCH_PROTECT_ADMIN: ${adminJson.value}"
+    }
+
+    // Parse maintain protected branches
+    if (maintainJson.name == 'BRANCH_PROTECT_MAINTAIN' && maintainJson.value) {
+      maintainBranches = maintainJson.value.split(',').collect { it.trim() }
+      echo "[INFO] githubApi: Found BRANCH_PROTECT_MAINTAIN: ${maintainJson.value}"
+    }
+
+    // Check if branch is in either list
+    def isAdminProtected = adminBranches.contains(branchName)
+    def isMaintainProtected = maintainBranches.contains(branchName)
+
+    if (isAdminProtected) {
+      echo "[INFO] githubApi: Branch '${branchName}' requires ADMIN permission"
+      return [
+        isProtected: true,
+        branchName: branchName,
+        protectionLevel: 'ADMIN',
+        adminBranches: adminJson.value ?: '',
+        maintainBranches: maintainJson.value ?: '',
+        reason: 'ADMIN_REQUIRED'
+      ]
+    } else if (isMaintainProtected) {
+      echo "[INFO] githubApi: Branch '${branchName}' requires MAINTAIN or ADMIN permission"
+      return [
+        isProtected: true,
+        branchName: branchName,
+        protectionLevel: 'MAINTAIN',
+        adminBranches: adminJson.value ?: '',
+        maintainBranches: maintainJson.value ?: '',
+        reason: 'MAINTAIN_REQUIRED'
+      ]
+    } else {
+      // Check if no protection variables exist at all
+      def hasNoVars = (!adminJson.name && !maintainJson.name) ||
+                      (adminJson.message?.contains('Not Found') && maintainJson.message?.contains('Not Found'))
+
+      if (hasNoVars) {
+        echo "[INFO] githubApi: No branch protection variables found in repository - skipping protection check"
         return [
           isProtected: false,
           branchName: branchName,
-          protectedBranches: protectedBranches,
-          reason: 'GITHUB_VAR_NOT_PROTECTED'
+          reason: 'NO_PROTECTION_VARS'
+        ]
+      } else {
+        echo "[INFO] githubApi: Branch '${branchName}' is not in any protected branches list"
+        return [
+          isProtected: false,
+          branchName: branchName,
+          adminBranches: adminJson.value ?: '',
+          maintainBranches: maintainJson.value ?: '',
+          reason: 'NOT_PROTECTED'
         ]
       }
-
-    } else if (jsonResponse.message && jsonResponse.message.contains('Not Found')) {
-      echo "[INFO] githubApi: PROTECTED_BRANCHES variable not found in repository - skipping protection check"
-      return [
-        isProtected: false,
-        branchName: branchName,
-        reason: 'NO_PROTECTED_BRANCHES_VAR'
-      ]
-    } else {
-      echo "[WARN] githubApi: Unexpected response for repository variables: ${response}"
-      return [
-        isProtected: false,
-        branchName: branchName,
-        reason: 'API_ERROR'
-      ]
     }
 
   } catch (Exception e) {
@@ -177,10 +211,10 @@ def validateDeployPermissions(Map params = [:]) {
     branchName: branchName
   ])
 
-  // If branch is not protected or no PROTECTED_BRANCHES variable, allow deployment
+  // If branch is not protected, allow deployment
   if (!branchProtection.isProtected) {
-    def reason = branchProtection.reason == 'NO_PROTECTED_BRANCHES_VAR' ? 'NO_PROTECTED_BRANCHES_VAR' : 'BRANCH_NOT_PROTECTED'
-    echo "[INFO] githubApi: ${reason == 'NO_PROTECTED_BRANCHES_VAR' ? 'No PROTECTED_BRANCHES variable found' : 'Branch not protected'}, allowing deployment"
+    def reason = branchProtection.reason == 'NO_PROTECTION_VARS' ? 'NO_PROTECTION_VARS' : 'BRANCH_NOT_PROTECTED'
+    echo "[INFO] githubApi: ${reason == 'NO_PROTECTION_VARS' ? 'No protection variables found' : 'Branch not protected'}, allowing deployment"
     return [
       canDeploy: true,
       reason: reason,
@@ -198,17 +232,29 @@ def validateDeployPermissions(Map params = [:]) {
     username: username
   ])
 
-  def canDeploy = userPermissions.hasAdminAccess
+  // Determine if user can deploy based on protection level and user role
+  def canDeploy = false
+  def deployReason = ''
+
+  if (branchProtection.protectionLevel == 'ADMIN') {
+    // Admin-only branches: only admin role can deploy
+    canDeploy = userPermissions.permission == 'admin'
+    deployReason = canDeploy ? 'ADMIN_ACCESS_GRANTED' : 'ADMIN_REQUIRED_BUT_NOT_ADMIN'
+  } else if (branchProtection.protectionLevel == 'MAINTAIN') {
+    // Maintain branches: both admin and maintain roles can deploy
+    canDeploy = userPermissions.permission in ['admin', 'maintain']
+    deployReason = canDeploy ? 'MAINTAIN_OR_ADMIN_ACCESS_GRANTED' : 'MAINTAIN_OR_ADMIN_REQUIRED'
+  }
 
   if (canDeploy) {
-    echo "[SUCCESS] githubApi: User '${username}' has admin access, allowing deployment to protected branch '${branchName}'"
+    echo "[SUCCESS] githubApi: User '${username}' has '${userPermissions.permission}' permission, allowing deployment to ${branchProtection.protectionLevel}-protected branch '${branchName}'"
   } else {
-    echo "[BLOCKED] githubApi: User '${username}' does not have admin access for protected branch '${branchName}'"
+    echo "[BLOCKED] githubApi: User '${username}' has '${userPermissions.permission}' permission but ${branchProtection.protectionLevel} permission required for branch '${branchName}'"
   }
 
   return [
     canDeploy: canDeploy,
-    reason: canDeploy ? 'ADMIN_ACCESS_GRANTED' : 'INSUFFICIENT_PERMISSIONS',
+    reason: deployReason,
     branchProtection: branchProtection,
     userPermissions: userPermissions,
     username: username,
