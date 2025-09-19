@@ -30,7 +30,7 @@ def call(Map args = [:]) {
 
   // Message configuration
   String message = args.message ?: buildDefaultMessage(vars)
-  String parseMode = args.parseMode ?: 'HTML'
+  String parseMode = args.parseMode ?: 'Markdown'
   boolean disableNotification = args.disableNotification ?: false
 
   // Validate required parameters
@@ -122,19 +122,31 @@ def buildDefaultMessage(vars) {
     'NOT_BUILT': '⭕'
   ][status] ?: '❓'
 
-  // Build message using HTML format to avoid Markdown parsing issues
+  // Build message with proper Markdown escaping
+  def escapeMarkdown = { text ->
+    if (!text) return 'N/A'
+    return text.toString()
+      .replace('_', '\\_')
+      .replace('*', '\\*')
+      .replace('[', '\\[')
+      .replace(']', '\\]')
+      .replace('(', '\\(')
+      .replace(')', '\\)')
+      .replace('`', '\\`')
+  }
+
   def message = """
-${statusEmoji} <b>Build ${status}</b>
+${statusEmoji} *Build ${status}*
 
-📦 <b>Project:</b> ${vars.REPO_NAME}
-🌿 <b>Branch:</b> ${vars.REPO_BRANCH}
-🏷️ <b>Tag:</b> ${vars.COMMIT_HASH}
+📦 *Project:* ${escapeMarkdown(vars.REPO_NAME)}
+🌿 *Branch:* ${escapeMarkdown(vars.REPO_BRANCH)}
+🏷️ *Tag:* ${escapeMarkdown(vars.COMMIT_HASH)}
 
-⏱️ <b>Duration:</b> ${duration}
-🔗 <b>Build:</b> <a href="${buildUrl}">#${env.BUILD_NUMBER}</a>
+⏱️ *Duration:* ${escapeMarkdown(duration)}
+🔗 *Build:* ${escapeMarkdown("#${env.BUILD_NUMBER}")}
 
-<b>Deployment:</b> ${vars.DEPLOYMENT}
-<b>Namespace:</b> ${vars.NAMESPACE}
+*Deployment:* ${escapeMarkdown(vars.DEPLOYMENT)}
+*Namespace:* ${escapeMarkdown(vars.NAMESPACE)}
 """
 
   return message.trim()
