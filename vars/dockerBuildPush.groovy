@@ -12,13 +12,13 @@
  * @throws Exception if Docker build or push fails
  */
 def call(Map args = [:]) {
-  // Get project vars if not provided
+  // Get project vars if not provided (pass vars to avoid duplicate calls)
   def vars = args.vars ?: getProjectVars()
 
   // Check deployment permissions (only if permission check is enabled)
   if (vars.CAN_DEPLOY == false) {
-    echo "[BLOCKED] dockerBuildPush: Deployment blocked due to insufficient permissions"
-    echo "[INFO] dockerBuildPush: User '${vars.GIT_USER}' cannot deploy to protected branch '${vars.REPO_BRANCH}'"
+    echo "[BLOCKED] dockerBuildPush: Deployment blocked - ${vars.PERMISSION_REASON}"
+    echo "[INFO] dockerBuildPush: Skipping Docker build and push"
     return
   }
 

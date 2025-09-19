@@ -13,13 +13,13 @@
  * @throws Exception if kubectl command fails
  */
 def call(Map args = [:]) {
-  // Get project vars if not provided
+  // Get project vars if not provided (pass vars to avoid duplicate calls)
   def vars = args.vars ?: getProjectVars()
 
   // Check deployment permissions (only if permission check is enabled)
   if (vars.CAN_DEPLOY == false) {
-    echo "[BLOCKED] k8sSetImage: Deployment blocked due to insufficient permissions"
-    echo "[INFO] k8sSetImage: User '${vars.GIT_USER}' cannot deploy to protected branch '${vars.REPO_BRANCH}'"
+    echo "[BLOCKED] k8sSetImage: Deployment blocked - ${vars.PERMISSION_REASON}"
+    echo "[INFO] k8sSetImage: Skipping Kubernetes deployment"
     return
   }
 

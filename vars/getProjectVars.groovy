@@ -117,7 +117,28 @@ def call(Map config = [:]) {
 
   // If deployment is blocked, notify and stop the pipeline
   if (!vars.CAN_DEPLOY) {
-    def blockMessage = """
+    def blockMessage = ""
+    def errorMessage = ""
+
+    if (permissionCheck.reason == 'WRONG_AGENT') {
+      def agentInfo = permissionCheck.agentValidation
+      blockMessage = """
+🚫 *Agent Assignment Error*
+
+📦 *Repository:* `${permissionCheck.repository ?: "${vars.REPO_NAME}"}`
+🌿 *Branch:* `${vars.REPO_BRANCH}`
+🤖 *Current Agent:* `${agentInfo?.currentAgent}`
+✅ *Required Agent:* `${agentInfo?.requiredAgent}`
+
+❌ *Reason:* ${getBlockedReasonMessage(permissionCheck)}
+
+🔧 Please run this pipeline on the correct Jenkins agent for this branch type.
+
+🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
+"""
+      errorMessage = "Agent validation failed: ${getBlockedReasonMessage(permissionCheck)}"
+    } else {
+      blockMessage = """
 🚫 *Deployment Blocked*
 
 📦 *Repository:* `${permissionCheck.repository ?: "${vars.REPO_NAME}"}`
@@ -126,11 +147,13 @@ def call(Map config = [:]) {
 
 ❌ *Reason:* ${getBlockedReasonMessage(permissionCheck)}
 
-🔒 This branch is protected and requires admin permissions to deploy.
-Please contact a repository administrator or use a pull request workflow.
+🔒 This branch requires specific permissions to deploy.
+Please contact a repository administrator or use the correct agent.
 
 🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
 """
+      errorMessage = "Deployment blocked: ${permissionCheck.reason} - ${getBlockedReasonMessage(permissionCheck)}"
+    }
 
     // Send Telegram notification about blocked deployment
     try {
@@ -142,7 +165,7 @@ Please contact a repository administrator or use a pull request workflow.
       echo "[WARN] getProjectVars: Failed to send blocked deployment notification: ${e.getMessage()}"
     }
 
-    error "Deployment blocked: ${permissionCheck.reason} - User '${vars.GIT_USER}' does not have admin permissions for protected branch '${vars.REPO_BRANCH}'"
+    error errorMessage
   }
 
   return vars
