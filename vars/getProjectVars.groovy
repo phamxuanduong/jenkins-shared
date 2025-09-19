@@ -166,10 +166,13 @@ Please contact a repository administrator or use the correct agent.
 
     // Send Telegram notification about blocked deployment
     try {
+      echo "[DEBUG] getProjectVars: About to call telegramNotify with vars parameter"
       telegramNotify([
         message: blockMessage,
-        failOnError: false
+        failOnError: false,
+        vars: vars  // CRITICAL: Pass vars to prevent recursive getProjectVars() call
       ])
+      echo "[DEBUG] getProjectVars: telegramNotify completed successfully"
     } catch (Exception e) {
       echo "[WARN] getProjectVars: Failed to send blocked deployment notification: ${e.getMessage()}"
     }
