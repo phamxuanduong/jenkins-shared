@@ -150,7 +150,7 @@ def buildDefaultMessage(vars) {
   }
 
   def message = """
-${statusEmoji} *Build ${escapeMarkdownV2(status)}*
+${escapeMarkdownV2(statusEmoji)} *Build ${escapeMarkdownV2(status)}*
 
 📦 *Project:* ${escapeMarkdownV2(vars.REPO_NAME)}
 🌿 *Branch:* ${escapeMarkdownV2(vars.REPO_BRANCH)}
