@@ -349,5 +349,49 @@ def validateDeployPermissions(Map params = [:]) {
   ]
 }
 
-// Note: Utility functions moved to utilityHelpers.groovy to avoid code duplication
-// These functions are now available globally: getRepoOwner(), getRepoName(), getUserFromCommit()
+/**
+ * Utility functions (kept here for Jenkins shared library compatibility)
+ */
+def getRepoOwner() {
+  def gitUrl = env.GIT_URL ?: ''
+  if (gitUrl) {
+    def urlPattern = /.*[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?$/
+    def matcher = gitUrl =~ urlPattern
+    if (matcher) {
+      return matcher[0][1]
+    }
+  }
+  return 'unknown'
+}
+
+def getRepoName() {
+  def gitUrl = env.GIT_URL ?: ''
+  if (gitUrl) {
+    def urlPattern = /.*[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?$/
+    def matcher = gitUrl =~ urlPattern
+    if (matcher) {
+      return matcher[0][2]
+    }
+  }
+  return 'unknown'
+}
+
+def getUserFromCommit() {
+  try {
+    // Try to get username from git commit
+    def gitUser = sh(
+      script: "git log -1 --pretty=format:'%an' 2>/dev/null || echo 'unknown'",
+      returnStdout: true
+    ).trim()
+
+    // If git user is an email, extract username part
+    if (gitUser.contains('@')) {
+      gitUser = gitUser.split('@')[0]
+    }
+
+    return gitUser
+  } catch (Exception e) {
+    echo "[WARN] githubApi: Could not determine git user: ${e.getMessage()}"
+    return 'unknown'
+  }
+}

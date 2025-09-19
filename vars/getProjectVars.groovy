@@ -20,14 +20,40 @@ def call(Map config = [:]) {
     currentBuild.result = 'FAILURE'
     throw new Exception("DEPLOYMENT_ALREADY_BLOCKED: Multiple calls detected")
   }
-  // Use utility functions to extract repository info
-  def repoName = getRepoName()
+  // Extract repository info from GIT_URL
+  def gitUrl = env.GIT_URL ?: ''
+  def repoName = ''
+
+  if (gitUrl) {
+    // Extract repo name from git URL (supports both SSH and HTTPS)
+    def urlPattern = /.*[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?$/
+    def matcher = gitUrl =~ urlPattern
+    if (matcher) {
+      repoName = matcher[0][2]
+    }
+  }
+
+  // Calculate branch name and sanitize for K8s naming
   def branchName = config.repoBranch ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME ?: 'main'
-  def sanitizedBranch = sanitizeBranchName(branchName)
+  def sanitizedBranch = branchName.replaceAll('/', '-').replaceAll('[^a-zA-Z0-9-]', '-').toLowerCase()
   def finalRepoName = config.repoName ?: repoName ?: 'unknown-repo'
 
-  // Determine registry based on branch name using utility function
-  def registry = config.registry ?: getRegistryForBranch(branchName)
+  // Determine registry based on branch name
+  def registry = config.registry
+  if (!registry) {
+    def lowerBranch = branchName.toLowerCase()
+    if (lowerBranch.contains('dev') || lowerBranch.contains('beta')) {
+      registry = env.REGISTRY_BETA ?: '172.16.3.0/mtw'
+    } else if (lowerBranch.contains('staging')) {
+      registry = env.REGISTRY_STAGING ?: '172.16.3.0/mtw'
+    } else if (lowerBranch.contains('main') || lowerBranch.contains('master') ||
+               lowerBranch.contains('prod') || lowerBranch.contains('production')) {
+      registry = env.REGISTRY_PROD ?: '172.16.3.0/mtw'
+    } else {
+      // Default to beta for unknown branches
+      registry = env.REGISTRY_BETA ?: '172.16.3.0/mtw'
+    }
+  }
 
   // Set defaults and allow overrides
   def vars = [
