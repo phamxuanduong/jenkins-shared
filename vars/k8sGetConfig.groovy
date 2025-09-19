@@ -40,7 +40,6 @@ def call(Map args = [:]) {
       def keysList = sh(
         script: """
         if kubectl get configmap '${cm}' -n '${ns}' >/dev/null 2>&1; then
-          echo "[DEBUG] k8sGetConfig: Getting keys from ConfigMap '${cm}'" >&2
           kubectl get configmap '${cm}' -n '${ns}' -o yaml | awk '/^data:/ {flag=1; next} /^[a-zA-Z]/ && flag {flag=0} flag && /^  [^ ]/ {gsub(/^  /, ""); gsub(/:.*/, ""); print}' 2>/dev/null || true
         fi
         """,

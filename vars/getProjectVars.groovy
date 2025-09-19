@@ -119,13 +119,10 @@ def call(Map config = [:]) {
   PERMISSION_REASON: ${vars.PERMISSION_REASON}
 """
 
-  // DEBUG: Check CAN_DEPLOY value and type
-  echo "[DEBUG] getProjectVars: CAN_DEPLOY value = '${vars.CAN_DEPLOY}', type = ${vars.CAN_DEPLOY?.getClass()}, equals false = ${vars.CAN_DEPLOY == false}"
 
   // If deployment is blocked, notify and stop the pipeline
   // Force explicit boolean comparison to handle string/boolean issues
   if (vars.CAN_DEPLOY == false || vars.CAN_DEPLOY == 'false') {
-    echo "[DEBUG] getProjectVars: ENTERING blocked deployment handling"
     def blockMessage = ""
     def errorMessage = ""
 
@@ -167,13 +164,11 @@ Please contact a repository administrator or use the correct agent.
 
     // Send Telegram notification about blocked deployment
     try {
-      echo "[DEBUG] getProjectVars: About to call telegramNotify with vars parameter"
       telegramNotify([
         message: blockMessage,
         failOnError: false,
         vars: vars  // CRITICAL: Pass vars to prevent recursive getProjectVars() call
       ])
-      echo "[DEBUG] getProjectVars: telegramNotify completed successfully"
     } catch (Exception e) {
       echo "[WARN] getProjectVars: Failed to send blocked deployment notification: ${e.getMessage()}"
     }
@@ -187,7 +182,6 @@ Please contact a repository administrator or use the correct agent.
     // Use currentBuild.result to mark build as failed and throw exception
     currentBuild.result = 'FAILURE'
 
-    echo "[DEBUG] getProjectVars: About to throw AbortException with message: ${errorMessage}"
 
     // Force immediate termination - try multiple approaches
     error("DEPLOYMENT_BLOCKED: ${errorMessage}")

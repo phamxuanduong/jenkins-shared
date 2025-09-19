@@ -27,31 +27,27 @@ def checkUserPermissions(Map params) {
   def repoOwner = params.repoOwner ?: getRepoOwner()
   def repoName = params.repoName ?: getRepoName()
   def username = params.username ?: getUserFromCommit()
-  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
+  def token = env.GITHUB_TOKEN
 
   if (!token) {
-    echo "[WARN] githubApi: GITHUB_TOKEN not found, skipping permission check"
+    echo "[WARN] githubApi: GITHUB_TOKEN environment variable not found, skipping permission check"
     return [hasAdminAccess: true, reason: 'NO_TOKEN'] // Allow if no token configured
   }
 
   try {
     echo "[INFO] githubApi: Checking permissions for user '${username}' on ${repoOwner}/${repoName}"
 
-    // Get user's repository permissions using secure credential handling
+    // Get user's repository permissions using GITHUB_TOKEN environment variable
     def apiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"
-    def response = ''
-
-    withCredentials([string(credentialsId: 'github-token', variable: 'SECURE_TOKEN')]) {
-      response = sh(
-        script: """
-        set +x
-        curl -s -H "Authorization: token \$SECURE_TOKEN" \\
-             -H "Accept: application/vnd.github.v3+json" \\
-             "${apiUrl}"
-        """,
-        returnStdout: true
-      ).trim()
-    }
+    def response = sh(
+      script: """
+      set +x
+      curl -s -H "Authorization: token ${token}" \\
+           -H "Accept: application/vnd.github.v3+json" \\
+           "${apiUrl}"
+      """,
+      returnStdout: true
+    ).trim()
 
     def jsonResponse = readJSON text: response
 
@@ -85,43 +81,39 @@ def getBranchProtectionRules(Map params) {
   def repoOwner = params.repoOwner ?: getRepoOwner()
   def repoName = params.repoName ?: getRepoName()
   def branchName = params.branchName ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME
-  def token = params.token ?: env.GITHUB_TOKEN ?: env.GITHUB_APP_INSTALLATION_TOKEN
+  def token = env.GITHUB_TOKEN
 
   if (!token) {
-    echo "[WARN] githubApi: GITHUB_TOKEN not found, skipping branch protection check"
+    echo "[WARN] githubApi: GITHUB_TOKEN environment variable not found, skipping branch protection check"
     return [isProtected: false, reason: 'NO_TOKEN']
   }
 
   try {
     echo "[INFO] githubApi: Fetching branch protection variables from GitHub Repository Variables for ${repoOwner}/${repoName}"
 
-    // Fetch BRANCH_PROTECT_ADMIN and BRANCH_PROTECT_MAINTAIN variables using secure credentials
+    // Fetch BRANCH_PROTECT_ADMIN and BRANCH_PROTECT_MAINTAIN variables using GITHUB_TOKEN
     def adminApiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/BRANCH_PROTECT_ADMIN"
     def maintainApiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/BRANCH_PROTECT_MAINTAIN"
-    def adminResponse = ''
-    def maintainResponse = ''
 
-    withCredentials([string(credentialsId: 'github-token', variable: 'SECURE_TOKEN')]) {
-      adminResponse = sh(
-        script: """
-        set +x
-        curl -s -H "Authorization: token \$SECURE_TOKEN" \\
-             -H "Accept: application/vnd.github.v3+json" \\
-             "${adminApiUrl}"
-        """,
-        returnStdout: true
-      ).trim()
+    def adminResponse = sh(
+      script: """
+      set +x
+      curl -s -H "Authorization: token ${token}" \\
+           -H "Accept: application/vnd.github.v3+json" \\
+           "${adminApiUrl}"
+      """,
+      returnStdout: true
+    ).trim()
 
-      maintainResponse = sh(
-        script: """
-        set +x
-        curl -s -H "Authorization: token \$SECURE_TOKEN" \\
-             -H "Accept: application/vnd.github.v3+json" \\
-             "${maintainApiUrl}"
-        """,
-        returnStdout: true
-      ).trim()
-    }
+    def maintainResponse = sh(
+      script: """
+      set +x
+      curl -s -H "Authorization: token ${token}" \\
+           -H "Accept: application/vnd.github.v3+json" \\
+           "${maintainApiUrl}"
+      """,
+      returnStdout: true
+    ).trim()
 
     def adminJson = readJSON text: adminResponse
     def maintainJson = readJSON text: maintainResponse
