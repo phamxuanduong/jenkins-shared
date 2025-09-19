@@ -30,7 +30,7 @@ def call(Map args = [:]) {
 
   // Message configuration
   String message = args.message ?: buildDefaultMessage(vars)
-  String parseMode = args.parseMode ?: null  // Disable parsing temporarily
+  String parseMode = args.parseMode ?: 'Markdown'
   boolean disableNotification = args.disableNotification ?: false
 
   // Validate required parameters
@@ -58,10 +58,8 @@ def call(Map args = [:]) {
       disable_notification: disableNotification
     ]
 
-    // Only add parse_mode if it's not null
-    if (parseMode) {
-      requestBody.parse_mode = parseMode
-    }
+    // Add parse_mode
+    requestBody.parse_mode = parseMode
 
     // Add thread ID if provided
     if (threadId) {
@@ -71,9 +69,6 @@ def call(Map args = [:]) {
     // Convert to JSON
     def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
 
-    // Debug: Print message length and content
-    echo "[DEBUG] telegramNotify: Message length: ${message.length()}"
-    echo "[DEBUG] telegramNotify: Message at offset 390-400: '${message.substring(Math.max(0, 390), Math.min(message.length(), 400))}'"
 
     // Send HTTP request using secure credential handling with fallback
     def response = ''
@@ -130,19 +125,19 @@ def buildDefaultMessage(vars) {
     'NOT_BUILT': '⭕'
   ][status] ?: '❓'
 
-  // Build simple message without formatting
+  // Build message with safe Markdown formatting
   def message = """
-${statusEmoji} Build ${status}
+${statusEmoji} *Build ${status}*
 
-📦 Project: ${vars.REPO_NAME}
-🌿 Branch: ${vars.REPO_BRANCH}
-🏷️ Tag: ${vars.COMMIT_HASH}
+📦 *Project:* ${vars.REPO_NAME}
+🌿 *Branch:* ${vars.REPO_BRANCH}
+🏷️ *Tag:* ${vars.COMMIT_HASH}
 
-⏱️ Duration: ${duration}
-🔗 Build: #${env.BUILD_NUMBER}
+⏱️ *Duration:* ${duration}
+🔗 *Build:* #${env.BUILD_NUMBER}
 
-Deployment: ${vars.DEPLOYMENT}
-Namespace: ${vars.NAMESPACE}
+*Deployment:* ${vars.DEPLOYMENT}
+*Namespace:* ${vars.NAMESPACE}
 """
 
   return message.trim()
