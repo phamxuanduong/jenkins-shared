@@ -153,6 +153,9 @@ Please contact a repository administrator or use a pull request workflow.
  */
 def getBlockedReasonMessage(permissionCheck) {
   switch (permissionCheck.reason) {
+    case 'WRONG_AGENT':
+      def agentInfo = permissionCheck.agentValidation
+      return "Branch '${agentInfo?.branchName}' (${agentInfo?.description}) must run on agent '${agentInfo?.requiredAgent}' but currently running on '${agentInfo?.currentAgent}'"
     case 'ADMIN_REQUIRED_BUT_NOT_ADMIN':
       return "Branch requires ADMIN permission but user has '${permissionCheck.userPermissions?.permission ?: 'unknown'}' permission"
     case 'MAINTAIN_OR_ADMIN_REQUIRED':
