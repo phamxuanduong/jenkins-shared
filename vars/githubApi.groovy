@@ -209,14 +209,14 @@ def validateAgentAssignment(Map params = [:]) {
 
   echo "[INFO] githubApi: Validating agent assignment for branch '${branchName}' on agent '${currentAgent}'"
 
-  // Define branch patterns and their required agents
+  // Define branch patterns and their allowed agent patterns
   def branchAgentRules = [
-    [pattern: /.*beta.*/, requiredAgent: 'beta', description: 'Beta branches'],
-    [pattern: /.*staging.*/, requiredAgent: 'prod', description: 'Staging branches'],
-    [pattern: /.*prod.*/, requiredAgent: 'prod', description: 'Production branches'],
-    [pattern: /^main$/, requiredAgent: 'prod', description: 'Main branch'],
-    [pattern: /^master$/, requiredAgent: 'prod', description: 'Master branch'],
-    [pattern: /.*production.*/, requiredAgent: 'prod', description: 'Production branches']
+    [pattern: /.*beta.*/, allowedAgents: ['beta'], description: 'Beta branches'],
+    [pattern: /.*staging.*/, allowedAgents: ['prod', 'prod-.*'], description: 'Staging branches'],
+    [pattern: /.*prod.*/, allowedAgents: ['prod', 'prod-.*'], description: 'Production branches'],
+    [pattern: /^main$/, allowedAgents: ['prod', 'prod-.*'], description: 'Main branch'],
+    [pattern: /^master$/, allowedAgents: ['prod', 'prod-.*'], description: 'Master branch'],
+    [pattern: /.*production.*/, allowedAgents: ['prod', 'prod-.*'], description: 'Production branches']
   ]
 
   // Check if branch matches any pattern
@@ -225,8 +225,10 @@ def validateAgentAssignment(Map params = [:]) {
   }
 
   if (matchedRule) {
-    def requiredAgent = matchedRule.requiredAgent
-    def isCorrectAgent = currentAgent == requiredAgent
+    def allowedAgents = matchedRule.allowedAgents
+    def isCorrectAgent = allowedAgents.any { agentPattern ->
+      currentAgent ==~ agentPattern
+    }
 
     if (isCorrectAgent) {
       echo "[SUCCESS] githubApi: ${matchedRule.description} '${branchName}' correctly running on agent '${currentAgent}'"
@@ -234,16 +236,17 @@ def validateAgentAssignment(Map params = [:]) {
         isValidAgent: true,
         branchName: branchName,
         currentAgent: currentAgent,
-        requiredAgent: requiredAgent,
+        allowedAgents: allowedAgents,
         reason: 'CORRECT_AGENT'
       ]
     } else {
-      echo "[BLOCKED] githubApi: ${matchedRule.description} '${branchName}' must run on agent '${requiredAgent}' but running on '${currentAgent}'"
+      def allowedAgentsStr = allowedAgents.join(' or ')
+      echo "[BLOCKED] githubApi: ${matchedRule.description} '${branchName}' must run on agent matching '${allowedAgentsStr}' but running on '${currentAgent}'"
       return [
         isValidAgent: false,
         branchName: branchName,
         currentAgent: currentAgent,
-        requiredAgent: requiredAgent,
+        allowedAgents: allowedAgents,
         description: matchedRule.description,
         reason: 'WRONG_AGENT'
       ]

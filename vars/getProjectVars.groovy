@@ -131,17 +131,18 @@ def call(Map config = [:]) {
 
     if (permissionCheck.reason == 'WRONG_AGENT') {
       def agentInfo = permissionCheck.agentValidation
+      def allowedAgentsStr = agentInfo?.allowedAgents?.join(' or ') ?: 'unknown'
       blockMessage = """
 🚫 *Agent Assignment Error*
 
 📦 *Repository:* `${permissionCheck.repository ?: "${vars.REPO_NAME}"}`
 🌿 *Branch:* `${vars.REPO_BRANCH}`
 🤖 *Current Agent:* `${agentInfo?.currentAgent}`
-✅ *Required Agent:* `${agentInfo?.requiredAgent}`
+✅ *Allowed Agents:* `${allowedAgentsStr}`
 
 ❌ *Reason:* ${getBlockedReasonMessage(permissionCheck)}
 
-🔧 Please run this pipeline on the correct Jenkins agent for this branch type.
+🔧 Please run this pipeline on a compatible Jenkins agent for this branch type.
 
 🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
 """
@@ -202,7 +203,8 @@ def getBlockedReasonMessage(permissionCheck) {
   switch (permissionCheck.reason) {
     case 'WRONG_AGENT':
       def agentInfo = permissionCheck.agentValidation
-      return "Branch '${agentInfo?.branchName}' (${agentInfo?.description}) must run on agent '${agentInfo?.requiredAgent}' but currently running on '${agentInfo?.currentAgent}'"
+      def allowedAgentsStr = agentInfo?.allowedAgents?.join(' or ') ?: 'unknown'
+      return "Branch '${agentInfo?.branchName}' (${agentInfo?.description}) must run on agent matching '${allowedAgentsStr}' but currently running on '${agentInfo?.currentAgent}'"
     case 'ADMIN_REQUIRED_BUT_NOT_ADMIN':
       return "Branch requires ADMIN permission but user has '${permissionCheck.userPermissions?.permission ?: 'unknown'}' permission"
     case 'MAINTAIN_OR_ADMIN_REQUIRED':
