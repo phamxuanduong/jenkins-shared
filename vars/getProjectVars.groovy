@@ -14,6 +14,12 @@
  * @return Map containing project variables and permission status
  */
 def call(Map config = [:]) {
+  // Fail-safe: Check if deployment is already blocked to prevent infinite loops
+  if (env.DEPLOYMENT_BLOCKED == 'true') {
+    echo "[FATAL] getProjectVars: Deployment already blocked - preventing infinite loop"
+    currentBuild.result = 'FAILURE'
+    throw new Exception("DEPLOYMENT_ALREADY_BLOCKED: Multiple calls detected")
+  }
   // Extract repository info from GIT_URL
   def gitUrl = env.GIT_URL ?: ''
   def repoName = ''
@@ -168,9 +174,14 @@ Please contact a repository administrator or use the correct agent.
     echo "[ERROR] getProjectVars: ${errorMessage}"
     echo "[FATAL] getProjectVars: Terminating pipeline due to blocked deployment"
 
+    // Set environment flag to prevent infinite loops
+    env.DEPLOYMENT_BLOCKED = 'true'
+
     // Use currentBuild.result to mark build as failed and throw exception
     currentBuild.result = 'FAILURE'
-    throw new Exception("DEPLOYMENT_BLOCKED: ${errorMessage}")
+
+    // Force immediate termination
+    throw new hudson.AbortException("DEPLOYMENT_BLOCKED: ${errorMessage}")
   }
 
   return vars
