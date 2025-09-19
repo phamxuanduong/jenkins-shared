@@ -119,8 +119,13 @@ def call(Map config = [:]) {
   PERMISSION_REASON: ${vars.PERMISSION_REASON}
 """
 
+  // DEBUG: Check CAN_DEPLOY value and type
+  echo "[DEBUG] getProjectVars: CAN_DEPLOY value = '${vars.CAN_DEPLOY}', type = ${vars.CAN_DEPLOY?.getClass()}, equals false = ${vars.CAN_DEPLOY == false}"
+
   // If deployment is blocked, notify and stop the pipeline
-  if (!vars.CAN_DEPLOY) {
+  // Force explicit boolean comparison to handle string/boolean issues
+  if (vars.CAN_DEPLOY == false || vars.CAN_DEPLOY == 'false') {
+    echo "[DEBUG] getProjectVars: ENTERING blocked deployment handling"
     def blockMessage = ""
     def errorMessage = ""
 
@@ -178,8 +183,10 @@ Please contact a repository administrator or use the correct agent.
     // Use currentBuild.result to mark build as failed and throw exception
     currentBuild.result = 'FAILURE'
 
-    // Force immediate termination
-    throw new hudson.AbortException("DEPLOYMENT_BLOCKED: ${errorMessage}")
+    echo "[DEBUG] getProjectVars: About to throw AbortException with message: ${errorMessage}"
+
+    // Force immediate termination - try multiple approaches
+    error("DEPLOYMENT_BLOCKED: ${errorMessage}")
   }
 
   return vars
