@@ -61,20 +61,42 @@ def call(Map args = [:]) {
     // Convert to JSON
     def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
 
-    // Send HTTP request using secure credential handling
+    // Send HTTP request using secure credential handling with fallback
     def response = ''
-    withCredentials([string(credentialsId: 'telegram-bot-token', variable: 'SECURE_BOT_TOKEN')]) {
-      def apiUrl = "https://api.telegram.org/bot\${SECURE_BOT_TOKEN}/sendMessage"
-      response = sh(
-        script: """
-        set +x
-        curl -s -X POST \\
-          -H "Content-Type: application/json" \\
-          -d '${jsonBody}' \\
-          "${apiUrl}"
-        """,
-        returnStdout: true
-      ).trim()
+
+    try {
+      // Try to use Jenkins credential first
+      withCredentials([string(credentialsId: 'telegram-bot-token', variable: 'SECURE_BOT_TOKEN')]) {
+        def apiUrl = "https://api.telegram.org/bot\${SECURE_BOT_TOKEN}/sendMessage"
+        response = sh(
+          script: """
+          set +x
+          curl -s -X POST \\
+            -H "Content-Type: application/json" \\
+            -d '${jsonBody}' \\
+            "${apiUrl}"
+          """,
+          returnStdout: true
+        ).trim()
+      }
+    } catch (Exception credError) {
+      // Fallback to environment variable if credential not found
+      echo "[WARN] telegramNotify: Jenkins credential 'telegram-bot-token' not found, falling back to environment variable"
+      if (botToken) {
+        def apiUrl = "https://api.telegram.org/bot${botToken}/sendMessage"
+        response = sh(
+          script: """
+          set +x
+          curl -s -X POST \\
+            -H "Content-Type: application/json" \\
+            -d '${jsonBody}' \\
+            "${apiUrl}"
+          """,
+          returnStdout: true
+        ).trim()
+      } else {
+        throw new Exception("No Telegram bot token found in Jenkins credentials or environment variables")
+      }
     }
 
     // Parse response using readJSON from Pipeline Utility Steps plugin
