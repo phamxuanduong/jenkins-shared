@@ -73,15 +73,8 @@ def call(Map args = [:]) {
     // Use environment-specific bot token directly with proper JSON escaping
     def apiUrl = "https://api.telegram.org/bot${botToken}/sendMessage"
 
-    // Check if we're in a node context, if not, use node wrapper
-    def isInNodeContext = true
-    try {
-      env.NODE_NAME // This will throw if not in node context
-    } catch (Exception ex) {
-      isInNodeContext = false
-    }
-
-    if (isInNodeContext) {
+    // Always wrap sh in node context for safety - this handles both cases
+    node {
       response = sh(
         script: """
         set +x
@@ -94,22 +87,6 @@ def call(Map args = [:]) {
         """,
         returnStdout: true
       ).trim()
-    } else {
-      // We're not in a node context (e.g., post block), so wrap in node
-      node {
-        response = sh(
-          script: """
-          set +x
-          # Use printf to properly escape JSON for shell
-          JSON_BODY=\$(printf '%s' '${jsonBody.replace("'", "'\\''")}')
-          curl -s -X POST \\
-            -H "Content-Type: application/json" \\
-            -d "\$JSON_BODY" \\
-            "${apiUrl}"
-          """,
-          returnStdout: true
-        ).trim()
-      }
     }
 
     // Parse response using readJSON from Pipeline Utility Steps plugin
