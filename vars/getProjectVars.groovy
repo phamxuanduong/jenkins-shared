@@ -115,14 +115,8 @@ def call(Map config = [:]) {
   PERMISSION_REASON: ${vars.PERMISSION_REASON}
 """
 
-  // Debug: Check CAN_DEPLOY status before error handling
-  echo "[DEBUG] getProjectVars: CAN_DEPLOY = ${vars.CAN_DEPLOY}, type = ${vars.CAN_DEPLOY?.getClass()}"
-  echo "[DEBUG] getProjectVars: Will check if (!vars.CAN_DEPLOY) = ${!vars.CAN_DEPLOY}"
-
   // If deployment is blocked, notify and stop the pipeline
-  echo "[DEBUG] getProjectVars: Checking if deployment is blocked..."
   if (!vars.CAN_DEPLOY) {
-    echo "[DEBUG] getProjectVars: Deployment IS blocked, proceeding with error handling..."
     def blockMessage = ""
     def errorMessage = ""
 
@@ -171,10 +165,12 @@ Please contact a repository administrator or use the correct agent.
       echo "[WARN] getProjectVars: Failed to send blocked deployment notification: ${e.getMessage()}"
     }
 
-    echo "[DEBUG] getProjectVars: About to throw error: ${errorMessage}"
-    error errorMessage
-  } else {
-    echo "[DEBUG] getProjectVars: Deployment is NOT blocked, continuing normally..."
+    echo "[ERROR] getProjectVars: ${errorMessage}"
+    echo "[FATAL] getProjectVars: Terminating pipeline due to blocked deployment"
+
+    // Use currentBuild.result to mark build as failed and throw exception
+    currentBuild.result = 'FAILURE'
+    throw new Exception("DEPLOYMENT_BLOCKED: ${errorMessage}")
   }
 
   return vars
