@@ -73,21 +73,19 @@ def call(Map args = [:]) {
     // Use environment-specific bot token directly with proper JSON escaping
     def apiUrl = "https://api.telegram.org/bot${botToken}/sendMessage"
 
-    // Always wrap sh in node context for safety - this handles both cases
-    node {
-      response = sh(
-        script: """
-        set +x
-        # Use printf to properly escape JSON for shell
-        JSON_BODY=\$(printf '%s' '${jsonBody.replace("'", "'\\''")}')
-        curl -s -X POST \\
-          -H "Content-Type: application/json" \\
-          -d "\$JSON_BODY" \\
-          "${apiUrl}"
-        """,
-        returnStdout: true
-      ).trim()
-    }
+    // Execute sh directly - we're already in a node context
+    response = sh(
+      script: """
+      set +x
+      # Use printf to properly escape JSON for shell
+      JSON_BODY=\$(printf '%s' '${jsonBody.replace("'", "'\\''")}')
+      curl -s -X POST \\
+        -H "Content-Type: application/json" \\
+        -d "\$JSON_BODY" \\
+        "${apiUrl}"
+      """,
+      returnStdout: true
+    ).trim()
 
     // Parse response using readJSON from Pipeline Utility Steps plugin
     def jsonResponse = readJSON text: response
