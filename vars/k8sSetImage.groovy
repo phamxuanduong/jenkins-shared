@@ -42,12 +42,18 @@ def call(Map args = [:]) {
       IMAGE=\$(printf '%q' "${image}")
       TAG=\$(printf '%q' "${tag}")
       NAMESPACE=\$(printf '%q' "${namespace}")
-      CONTAINER=\$(printf '%q' "${container}")
+
+      # Handle container wildcard specially
+      if [ "${container}" = "*" ]; then
+        CONTAINER="*"
+      else
+        CONTAINER=\$(printf '%q' "${container}")
+      fi
 
       echo "[INFO] k8sSetImage: Updating deployment '\${DEPLOYMENT}' in namespace '\${NAMESPACE}'"
       echo "[INFO] k8sSetImage: Setting image to '\${IMAGE}:\${TAG}' for container '\${CONTAINER}'"
 
-      kubectl set image deployment/"\${DEPLOYMENT}" "\${CONTAINER}=\${IMAGE}:\${TAG}" -n "\${NAMESPACE}"
+      kubectl set image deployment/"\${DEPLOYMENT}" \${CONTAINER}="\${IMAGE}:\${TAG}" -n "\${NAMESPACE}"
 
       echo "[SUCCESS] k8sSetImage: Updated deployment '\${DEPLOYMENT}' with image '\${IMAGE}:\${TAG}'"
     """
