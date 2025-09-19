@@ -30,7 +30,7 @@ def call(Map args = [:]) {
 
   // Message configuration
   String message = args.message ?: buildDefaultMessage(vars)
-  String parseMode = args.parseMode ?: 'Markdown'
+  String parseMode = args.parseMode ?: 'MarkdownV2'
   boolean disableNotification = args.disableNotification ?: false
 
   // Validate required parameters
@@ -125,19 +125,42 @@ def buildDefaultMessage(vars) {
     'NOT_BUILT': '⭕'
   ][status] ?: '❓'
 
-  // Build message with safe Markdown formatting
+  // Build message with MarkdownV2 formatting (requires escaping special chars)
+  def escapeMarkdownV2 = { text ->
+    if (!text) return 'N/A'
+    return text.toString()
+      .replace('_', '\\_')
+      .replace('*', '\\*')
+      .replace('[', '\\[')
+      .replace(']', '\\]')
+      .replace('(', '\\(')
+      .replace(')', '\\)')
+      .replace('~', '\\~')
+      .replace('`', '\\`')
+      .replace('>', '\\>')
+      .replace('#', '\\#')
+      .replace('+', '\\+')
+      .replace('-', '\\-')
+      .replace('=', '\\=')
+      .replace('|', '\\|')
+      .replace('{', '\\{')
+      .replace('}', '\\}')
+      .replace('.', '\\.')
+      .replace('!', '\\!')
+  }
+
   def message = """
-${statusEmoji} *Build ${status}*
+${statusEmoji} *Build ${escapeMarkdownV2(status)}*
 
-📦 *Project:* ${vars.REPO_NAME}
-🌿 *Branch:* ${vars.REPO_BRANCH}
-🏷️ *Tag:* ${vars.COMMIT_HASH}
+📦 *Project:* ${escapeMarkdownV2(vars.REPO_NAME)}
+🌿 *Branch:* ${escapeMarkdownV2(vars.REPO_BRANCH)}
+🏷️ *Tag:* ${escapeMarkdownV2(vars.COMMIT_HASH)}
 
-⏱️ *Duration:* ${duration}
-🔗 *Build:* #${env.BUILD_NUMBER}
+⏱️ *Duration:* ${escapeMarkdownV2(duration)}
+🔗 *Build:* ${escapeMarkdownV2("#${env.BUILD_NUMBER}")}
 
-*Deployment:* ${vars.DEPLOYMENT}
-*Namespace:* ${vars.NAMESPACE}
+*Deployment:* ${escapeMarkdownV2(vars.DEPLOYMENT)}
+*Namespace:* ${escapeMarkdownV2(vars.NAMESPACE)}
 """
 
   return message.trim()
