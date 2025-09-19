@@ -126,26 +126,7 @@ def call(Map config = [:]) {
     def blockMessage = ""
     def errorMessage = ""
 
-    if (permissionCheck.reason == 'WRONG_AGENT') {
-      def agentInfo = permissionCheck.agentValidation
-      def allowedAgentsStr = agentInfo?.allowedAgents?.join(' or ') ?: 'unknown'
-      blockMessage = """
-🚫 *Agent Assignment Error*
-
-📦 *Repository:* `${permissionCheck.repository ?: "${vars.REPO_NAME}"}`
-🌿 *Branch:* `${vars.REPO_BRANCH}`
-🤖 *Current Agent:* `${agentInfo?.currentAgent}`
-✅ *Allowed Agents:* `${allowedAgentsStr}`
-
-❌ *Reason:* ${getBlockedReasonMessage(permissionCheck)}
-
-🔧 Please run this pipeline on a compatible Jenkins agent for this branch type.
-
-🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
-"""
-      errorMessage = "Agent validation failed: ${getBlockedReasonMessage(permissionCheck)}"
-    } else {
-      blockMessage = """
+    blockMessage = """
 🚫 *Deployment Blocked*
 
 📦 *Repository:* `${permissionCheck.repository ?: "${vars.REPO_NAME}"}`
@@ -155,12 +136,11 @@ def call(Map config = [:]) {
 ❌ *Reason:* ${getBlockedReasonMessage(permissionCheck)}
 
 🔒 This branch requires specific permissions to deploy.
-Please contact a repository administrator or use the correct agent.
+Please contact a repository administrator.
 
 🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
 """
-      errorMessage = "Deployment blocked: ${permissionCheck.reason} - ${getBlockedReasonMessage(permissionCheck)}"
-    }
+    errorMessage = "Deployment blocked: ${permissionCheck.reason} - ${getBlockedReasonMessage(permissionCheck)}"
 
     // Send Telegram notification about blocked deployment
     try {
@@ -195,10 +175,6 @@ Please contact a repository administrator or use the correct agent.
  */
 def getBlockedReasonMessage(permissionCheck) {
   switch (permissionCheck.reason) {
-    case 'WRONG_AGENT':
-      def agentInfo = permissionCheck.agentValidation
-      def allowedAgentsStr = agentInfo?.allowedAgents?.join(' or ') ?: 'unknown'
-      return "Branch '${agentInfo?.branchName}' (${agentInfo?.description}) must run on agent matching '${allowedAgentsStr}' but currently running on '${agentInfo?.currentAgent}'"
     case 'ADMIN_REQUIRED_BUT_NOT_ADMIN':
       return "Branch requires ADMIN permission but user has '${permissionCheck.userPermissions?.permission ?: 'unknown'}' permission"
     case 'MAINTAIN_OR_ADMIN_REQUIRED':

@@ -1,7 +1,7 @@
 /**
  * githubApi - GitHub API utility functions for permissions and branch protection
  *
- * @param action String: The action to perform ('checkPermissions', 'getBranchProtection', 'validateAgentAssignment', 'validateDeployPermissions')
+ * @param action String: The action to perform ('checkPermissions', 'getBranchProtection', 'validateDeployPermissions')
  * @param params Map: Parameters specific to each action
  * @return Mixed: Result based on action
  */
@@ -11,8 +11,6 @@ def call(String action, Map params = [:]) {
       return checkUserPermissions(params)
     case 'getBranchProtection':
       return getBranchProtectionRules(params)
-    case 'validateAgentAssignment':
-      return validateAgentAssignment(params)
     case 'validateDeployPermissions':
       return validateDeployPermissions(params)
     default:
@@ -192,67 +190,6 @@ def getBranchProtectionRules(Map params) {
 }
 
 
-/**
- * Validate agent assignment based on branch patterns
- */
-def validateAgentAssignment(Map params = [:]) {
-  def branchName = params.branchName ?: env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME
-  def currentAgent = env.NODE_NAME ?: 'unknown'
-
-  echo "[INFO] githubApi: Validating agent assignment for branch '${branchName}' on agent '${currentAgent}'"
-
-  // Define branch patterns and their allowed agent patterns
-  def branchAgentRules = [
-    [pattern: /.*beta.*/, allowedAgents: ['beta'], description: 'Beta branches'],
-    [pattern: /.*staging.*/, allowedAgents: ['prod', 'prod-.*'], description: 'Staging branches'],
-    [pattern: /.*prod.*/, allowedAgents: ['prod', 'prod-.*'], description: 'Production branches'],
-    [pattern: /^main$/, allowedAgents: ['prod', 'prod-.*'], description: 'Main branch'],
-    [pattern: /^master$/, allowedAgents: ['prod', 'prod-.*'], description: 'Master branch'],
-    [pattern: /.*production.*/, allowedAgents: ['prod', 'prod-.*'], description: 'Production branches']
-  ]
-
-  // Check if branch matches any pattern
-  def matchedRule = branchAgentRules.find { rule ->
-    branchName.toLowerCase() ==~ rule.pattern
-  }
-
-  if (matchedRule) {
-    def allowedAgents = matchedRule.allowedAgents
-    def isCorrectAgent = allowedAgents.any { agentPattern ->
-      currentAgent ==~ agentPattern
-    }
-
-    if (isCorrectAgent) {
-      echo "[SUCCESS] githubApi: ${matchedRule.description} '${branchName}' correctly running on agent '${currentAgent}'"
-      return [
-        isValidAgent: true,
-        branchName: branchName,
-        currentAgent: currentAgent,
-        allowedAgents: allowedAgents,
-        reason: 'CORRECT_AGENT'
-      ]
-    } else {
-      def allowedAgentsStr = allowedAgents.join(' or ')
-      echo "[BLOCKED] githubApi: ${matchedRule.description} '${branchName}' must run on agent matching '${allowedAgentsStr}' but running on '${currentAgent}'"
-      return [
-        isValidAgent: false,
-        branchName: branchName,
-        currentAgent: currentAgent,
-        allowedAgents: allowedAgents,
-        description: matchedRule.description,
-        reason: 'WRONG_AGENT'
-      ]
-    }
-  } else {
-    echo "[INFO] githubApi: Branch '${branchName}' has no specific agent requirements"
-    return [
-      isValidAgent: true,
-      branchName: branchName,
-      currentAgent: currentAgent,
-      reason: 'NO_AGENT_REQUIREMENT'
-    ]
-  }
-}
 
 /**
  * Perform comprehensive permission check
@@ -267,23 +204,6 @@ def validateDeployPermissions(Map params = [:]) {
   echo "[INFO] githubApi: Repository: ${repoOwner}/${repoName}"
   echo "[INFO] githubApi: Branch: ${branchName}"
   echo "[INFO] githubApi: User: ${username}"
-
-  // First, validate agent assignment
-  def agentValidation = validateAgentAssignment([
-    branchName: branchName
-  ])
-
-  if (!agentValidation.isValidAgent) {
-    echo "[BLOCKED] githubApi: Agent validation failed for branch '${branchName}'"
-    return [
-      canDeploy: false,
-      reason: 'WRONG_AGENT',
-      agentValidation: agentValidation,
-      username: username,
-      branchName: branchName,
-      repository: "${repoOwner}/${repoName}"
-    ]
-  }
 
   // Check branch protection
   def branchProtection = getBranchProtectionRules([
