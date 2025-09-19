@@ -30,7 +30,7 @@ def call(Map args = [:]) {
 
   // Message configuration
   String message = args.message ?: buildDefaultMessage(vars)
-  String parseMode = args.parseMode ?: 'Markdown'
+  String parseMode = args.parseMode ?: 'HTML'
   boolean disableNotification = args.disableNotification ?: false
 
   // Validate required parameters
@@ -122,19 +122,19 @@ def buildDefaultMessage(vars) {
     'NOT_BUILT': '⭕'
   ][status] ?: '❓'
 
-  // Build message
+  // Build message using HTML format to avoid Markdown parsing issues
   def message = """
-${statusEmoji} *Build ${status}*
+${statusEmoji} <b>Build ${status}</b>
 
-📦 *Project:* `${vars.REPO_NAME}`
-🌿 *Branch:* `${vars.REPO_BRANCH}`
-🏷️ *Tag:* `${vars.COMMIT_HASH}`
+📦 <b>Project:</b> ${vars.REPO_NAME}
+🌿 <b>Branch:</b> ${vars.REPO_BRANCH}
+🏷️ <b>Tag:</b> ${vars.COMMIT_HASH}
 
-⏱️ *Duration:* ${duration}
-🔗 *Build:* [#${env.BUILD_NUMBER}](${buildUrl})
+⏱️ <b>Duration:</b> ${duration}
+🔗 <b>Build:</b> <a href="${buildUrl}">#${env.BUILD_NUMBER}</a>
 
-*Deployment:* `${vars.DEPLOYMENT}`
-*Namespace:* `${vars.NAMESPACE}`
+<b>Deployment:</b> ${vars.DEPLOYMENT}
+<b>Namespace:</b> ${vars.NAMESPACE}
 """
 
   return message.trim()
