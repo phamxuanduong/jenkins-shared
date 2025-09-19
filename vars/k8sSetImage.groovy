@@ -29,17 +29,31 @@ def call(Map args = [:]) {
   String namespace = args.namespace ?: vars.NAMESPACE
   String container = args.container ?: '*'
 
+  // Input validation to prevent command injection
+  validateK8sDeploymentName(deployment)
+  validateDockerImageName(image)
+  validateDockerTag(tag)
+  validateK8sNamespace(namespace)
+  validateContainerName(container)
+
   sh(
     label: "k8sSetImage: ${deployment} -> ${image}:${tag}",
     script: """#!/bin/bash
       set -Eeuo pipefail
 
-      echo "[INFO] k8sSetImage: Updating deployment '${deployment}' in namespace '${namespace}'"
-      echo "[INFO] k8sSetImage: Setting image to '${image}:${tag}' for container '${container}'"
+      # Use properly quoted variables to prevent injection
+      DEPLOYMENT=\$(printf '%q' "${deployment}")
+      IMAGE=\$(printf '%q' "${image}")
+      TAG=\$(printf '%q' "${tag}")
+      NAMESPACE=\$(printf '%q' "${namespace}")
+      CONTAINER=\$(printf '%q' "${container}")
 
-      kubectl set image deployment/${deployment} ${container}=${image}:${tag} -n ${namespace}
+      echo "[INFO] k8sSetImage: Updating deployment '\${DEPLOYMENT}' in namespace '\${NAMESPACE}'"
+      echo "[INFO] k8sSetImage: Setting image to '\${IMAGE}:\${TAG}' for container '\${CONTAINER}'"
 
-      echo "[SUCCESS] k8sSetImage: Updated deployment '${deployment}' with image '${image}:${tag}'"
+      kubectl set image deployment/"\${DEPLOYMENT}" "\${CONTAINER}=\${IMAGE}:\${TAG}" -n "\${NAMESPACE}"
+
+      echo "[SUCCESS] k8sSetImage: Updated deployment '\${DEPLOYMENT}' with image '\${IMAGE}:\${TAG}'"
     """
   )
 }

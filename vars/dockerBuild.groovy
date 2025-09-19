@@ -20,18 +20,30 @@ def call(Map args = [:]) {
   String dockerfile = args.dockerfile ?: 'Dockerfile'
   String context = args.context ?: '.'
 
+  // Input validation to prevent command injection
+  validateDockerImageName(image)
+  validateDockerTag(tag)
+  validateFilePath(dockerfile)
+  validateContextPath(context)
+
   sh(
     label: "dockerBuild: ${image}:${tag}",
     script: """#!/bin/bash
       set -Eeuo pipefail
 
-      echo "[INFO] dockerBuild: Building Docker image ${image}:${tag}"
-      echo "[INFO] dockerBuild: Build context: ${context}"
-      echo "[INFO] dockerBuild: Using dockerfile: ${dockerfile}"
+      # Use properly quoted variables to prevent injection
+      IMAGE=\$(printf '%q' "${image}")
+      TAG=\$(printf '%q' "${tag}")
+      DOCKERFILE=\$(printf '%q' "${dockerfile}")
+      CONTEXT=\$(printf '%q' "${context}")
 
-      docker build -t ${image}:${tag} -f ${dockerfile} ${context}
+      echo "[INFO] dockerBuild: Building Docker image \${IMAGE}:\${TAG}"
+      echo "[INFO] dockerBuild: Build context: \${CONTEXT}"
+      echo "[INFO] dockerBuild: Using dockerfile: \${DOCKERFILE}"
 
-      echo "[SUCCESS] dockerBuild: Built ${image}:${tag}"
+      docker build -t "\${IMAGE}:\${TAG}" -f "\${DOCKERFILE}" "\${CONTEXT}"
+
+      echo "[SUCCESS] dockerBuild: Built \${IMAGE}:\${TAG}"
     """
   )
 }

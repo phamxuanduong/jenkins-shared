@@ -37,17 +37,21 @@ def checkUserPermissions(Map params) {
   try {
     echo "[INFO] githubApi: Checking permissions for user '${username}' on ${repoOwner}/${repoName}"
 
-    // Get user's repository permissions (hide command from logs)
+    // Get user's repository permissions using secure credential handling
     def apiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/collaborators/${username}/permission"
-    def response = sh(
-      script: """
-      set +x
-      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
-           -H "Accept: application/vnd.github.v3+json" \\
-           "${apiUrl}"
-      """,
-      returnStdout: true
-    ).trim()
+    def response = ''
+
+    withCredentials([string(credentialsId: 'github-token', variable: 'SECURE_TOKEN')]) {
+      response = sh(
+        script: """
+        set +x
+        curl -s -H "Authorization: token \$SECURE_TOKEN" \\
+             -H "Accept: application/vnd.github.v3+json" \\
+             "${apiUrl}"
+        """,
+        returnStdout: true
+      ).trim()
+    }
 
     def jsonResponse = readJSON text: response
 
@@ -91,29 +95,33 @@ def getBranchProtectionRules(Map params) {
   try {
     echo "[INFO] githubApi: Fetching branch protection variables from GitHub Repository Variables for ${repoOwner}/${repoName}"
 
-    // Fetch BRANCH_PROTECT_ADMIN variable
+    // Fetch BRANCH_PROTECT_ADMIN and BRANCH_PROTECT_MAINTAIN variables using secure credentials
     def adminApiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/BRANCH_PROTECT_ADMIN"
-    def adminResponse = sh(
-      script: """
-      set +x
-      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
-           -H "Accept: application/vnd.github.v3+json" \\
-           "${adminApiUrl}"
-      """,
-      returnStdout: true
-    ).trim()
-
-    // Fetch BRANCH_PROTECT_MAINTAIN variable
     def maintainApiUrl = "https://api.github.com/repos/${repoOwner}/${repoName}/actions/variables/BRANCH_PROTECT_MAINTAIN"
-    def maintainResponse = sh(
-      script: """
-      set +x
-      curl -s -H "Authorization: token \${GITHUB_TOKEN}" \\
-           -H "Accept: application/vnd.github.v3+json" \\
-           "${maintainApiUrl}"
-      """,
-      returnStdout: true
-    ).trim()
+    def adminResponse = ''
+    def maintainResponse = ''
+
+    withCredentials([string(credentialsId: 'github-token', variable: 'SECURE_TOKEN')]) {
+      adminResponse = sh(
+        script: """
+        set +x
+        curl -s -H "Authorization: token \$SECURE_TOKEN" \\
+             -H "Accept: application/vnd.github.v3+json" \\
+             "${adminApiUrl}"
+        """,
+        returnStdout: true
+      ).trim()
+
+      maintainResponse = sh(
+        script: """
+        set +x
+        curl -s -H "Authorization: token \$SECURE_TOKEN" \\
+             -H "Accept: application/vnd.github.v3+json" \\
+             "${maintainApiUrl}"
+        """,
+        returnStdout: true
+      ).trim()
+    }
 
     def adminJson = readJSON text: adminResponse
     def maintainJson = readJSON text: maintainResponse

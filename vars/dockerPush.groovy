@@ -16,16 +16,24 @@ def call(Map args = [:]) {
   String image = args.image ?: "${vars.REGISTRY}/${vars.APP_NAME}"
   String tag = args.tag ?: vars.COMMIT_HASH
 
+  // Input validation to prevent command injection
+  validateDockerImageName(image)
+  validateDockerTag(tag)
+
   sh(
     label: "dockerPush: ${image}:${tag}",
     script: """#!/bin/bash
       set -Eeuo pipefail
 
-      echo "[INFO] dockerPush: Pushing Docker image ${image}:${tag}"
+      # Use properly quoted variables to prevent injection
+      IMAGE=\$(printf '%q' "${image}")
+      TAG=\$(printf '%q' "${tag}")
 
-      docker push ${image}:${tag}
+      echo "[INFO] dockerPush: Pushing Docker image \${IMAGE}:\${TAG}"
 
-      echo "[SUCCESS] dockerPush: Pushed ${image}:${tag}"
+      docker push "\${IMAGE}:\${TAG}"
+
+      echo "[SUCCESS] dockerPush: Pushed \${IMAGE}:\${TAG}"
     """
   )
 }

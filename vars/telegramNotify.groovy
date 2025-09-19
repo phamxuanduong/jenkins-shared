@@ -45,9 +45,6 @@ def call(Map args = [:]) {
   }
 
   try {
-    // Build API URL
-    def apiUrl = "https://api.telegram.org/bot${botToken}/sendMessage"
-
     // Build request body
     def requestBody = [
       chat_id: chatId,
@@ -64,16 +61,21 @@ def call(Map args = [:]) {
     // Convert to JSON
     def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
 
-    // Send HTTP request
-    def response = sh(
-      script: """
-      curl -s -X POST \\
-        -H "Content-Type: application/json" \\
-        -d '${jsonBody}' \\
-        "${apiUrl}"
-      """,
-      returnStdout: true
-    ).trim()
+    // Send HTTP request using secure credential handling
+    def response = ''
+    withCredentials([string(credentialsId: 'telegram-bot-token', variable: 'SECURE_BOT_TOKEN')]) {
+      def apiUrl = "https://api.telegram.org/bot\${SECURE_BOT_TOKEN}/sendMessage"
+      response = sh(
+        script: """
+        set +x
+        curl -s -X POST \\
+          -H "Content-Type: application/json" \\
+          -d '${jsonBody}' \\
+          "${apiUrl}"
+        """,
+        returnStdout: true
+      ).trim()
+    }
 
     // Parse response using readJSON from Pipeline Utility Steps plugin
     def jsonResponse = readJSON text: response

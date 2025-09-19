@@ -27,26 +27,38 @@ def call(Map args = [:]) {
   String dockerfile = args.dockerfile ?: 'Dockerfile'
   String context = args.context ?: '.'
 
+  // Input validation to prevent command injection
+  validateDockerImageName(image)
+  validateDockerTag(tag)
+  validateFilePath(dockerfile)
+  validateContextPath(context)
+
   sh(
     label: "dockerBuildPush: ${image}:${tag}",
     script: """#!/bin/bash
       set -Eeuo pipefail
 
-      echo "[INFO] dockerBuildPush: Building and pushing Docker image ${image}:${tag}"
-      echo "[INFO] dockerBuildPush: Build context: ${context}"
-      echo "[INFO] dockerBuildPush: Using dockerfile: ${dockerfile}"
+      # Use properly quoted variables to prevent injection
+      IMAGE=\$(printf '%q' "${image}")
+      TAG=\$(printf '%q' "${tag}")
+      DOCKERFILE=\$(printf '%q' "${dockerfile}")
+      CONTEXT=\$(printf '%q' "${context}")
+
+      echo "[INFO] dockerBuildPush: Building and pushing Docker image \${IMAGE}:\${TAG}"
+      echo "[INFO] dockerBuildPush: Build context: \${CONTEXT}"
+      echo "[INFO] dockerBuildPush: Using dockerfile: \${DOCKERFILE}"
 
       # Build image
       echo "[INFO] dockerBuildPush: Building image..."
-      docker build -t ${image}:${tag} -f ${dockerfile} ${context}
-      echo "[SUCCESS] dockerBuildPush: Built ${image}:${tag}"
+      docker build -t "\${IMAGE}:\${TAG}" -f "\${DOCKERFILE}" "\${CONTEXT}"
+      echo "[SUCCESS] dockerBuildPush: Built \${IMAGE}:\${TAG}"
 
       # Push image
       echo "[INFO] dockerBuildPush: Pushing image..."
-      docker push ${image}:${tag}
-      echo "[SUCCESS] dockerBuildPush: Pushed ${image}:${tag}"
+      docker push "\${IMAGE}:\${TAG}"
+      echo "[SUCCESS] dockerBuildPush: Pushed \${IMAGE}:\${TAG}"
 
-      echo "[SUCCESS] dockerBuildPush: Build and push completed for ${image}:${tag}"
+      echo "[SUCCESS] dockerBuildPush: Build and push completed for \${IMAGE}:\${TAG}"
     """
   )
 }
