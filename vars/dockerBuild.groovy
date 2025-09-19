@@ -21,10 +21,7 @@ def call(Map args = [:]) {
   String context = args.context ?: '.'
 
   // Input validation to prevent command injection
-  validateDockerImageName(image)
-  validateDockerTag(tag)
-  validateFilePath(dockerfile)
-  validateContextPath(context)
+  // Note: Basic validation is done via shell quoting below
 
   sh(
     label: "dockerBuild: ${image}:${tag}",

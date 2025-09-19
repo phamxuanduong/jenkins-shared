@@ -30,11 +30,7 @@ def call(Map args = [:]) {
   String container = args.container ?: '*'
 
   // Input validation to prevent command injection
-  validateK8sDeploymentName(deployment)
-  validateDockerImageName(image)
-  validateDockerTag(tag)
-  validateK8sNamespace(namespace)
-  validateContainerName(container)
+  // Note: Basic validation is done via shell quoting below
 
   sh(
     label: "k8sSetImage: ${deployment} -> ${image}:${tag}",

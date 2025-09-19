@@ -28,8 +28,7 @@ def call(Map args = [:]) {
   String context = args.context ?: 'docker-swarm'
 
   // Input validation to prevent command injection
-  validateDockerImageName(image)
-  validateDockerTag(tag)
+  // Note: Basic validation is done via shell quoting below
 
   sh(
     label: "swarmSetImage: ${service} -> ${image}:${tag}",

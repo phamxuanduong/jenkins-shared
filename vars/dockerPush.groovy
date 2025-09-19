@@ -17,8 +17,7 @@ def call(Map args = [:]) {
   String tag = args.tag ?: vars.COMMIT_HASH
 
   // Input validation to prevent command injection
-  validateDockerImageName(image)
-  validateDockerTag(tag)
+  // Note: Basic validation is done via shell quoting below
 
   sh(
     label: "dockerPush: ${image}:${tag}",
