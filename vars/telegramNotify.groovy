@@ -20,8 +20,8 @@ def call(Map args = [:]) {
     return
   }
 
-  // Get project vars if not provided
-  def vars = args.vars ?: getProjectVars()
+  // Get project vars if not provided - use cached data if available
+  def vars = args.vars ?: getProjectVarsOptimized()
 
   // Auto-select credentials based on environment if not explicitly provided
   String botToken = args.botToken ?: getEnvironmentBotToken(vars.REPO_BRANCH)
@@ -201,4 +201,18 @@ def getEnvironmentName(branchName) {
   } else {
     return 'BETA' // fallback
   }
+}
+
+/**
+ * Optimized project vars getter that uses cached data from pipelineSetup
+ */
+def getProjectVarsOptimized() {
+  if (env.PIPELINE_SETUP_COMPLETE == 'true' && env.PROJECT_VARS_JSON) {
+    try {
+      return readJSON text: env.PROJECT_VARS_JSON
+    } catch (Exception e) {
+      echo "[WARN] telegramNotify: Could not parse cached project vars, falling back to getProjectVars()"
+    }
+  }
+  return getProjectVars()
 }

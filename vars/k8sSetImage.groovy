@@ -13,8 +13,8 @@
  * @throws Exception if kubectl command fails
  */
 def call(Map args = [:]) {
-  // Get project vars if not provided (pass vars to avoid duplicate calls)
-  def vars = args.vars ?: getProjectVars()
+  // Get project vars if not provided - use cached data if available
+  def vars = args.vars ?: getProjectVarsOptimized()
 
   // Check deployment permissions (only if permission check is enabled)
   if (vars.CAN_DEPLOY == false) {
@@ -58,4 +58,18 @@ def call(Map args = [:]) {
       echo "[SUCCESS] k8sSetImage: Updated deployment '\${DEPLOYMENT}' with image '\${IMAGE}:\${TAG}'"
     """
   )
+}
+
+/**
+ * Optimized project vars getter that uses cached data from pipelineSetup
+ */
+def getProjectVarsOptimized() {
+  if (env.PIPELINE_SETUP_COMPLETE == 'true' && env.PROJECT_VARS_JSON) {
+    try {
+      return readJSON text: env.PROJECT_VARS_JSON
+    } catch (Exception e) {
+      echo "[WARN] k8sSetImage: Could not parse cached project vars, falling back to getProjectVars()"
+    }
+  }
+  return getProjectVars()
 }

@@ -11,8 +11,8 @@
  * @return void - Files are written to workspace
  */
 def call(Map args = [:]) {
-  // Get project vars if not provided
-  def vars = args.vars ?: getProjectVars()
+  // Get project vars if not provided - check for cached data first
+  def vars = args.vars ?: getProjectVarsOptimized()
 
   String ns = args.namespace ?: vars.NAMESPACE
   String branchCm = args.configmap ?: vars.SANITIZED_BRANCH
@@ -102,4 +102,18 @@ def fetchConfigKey(String ns, String cm, String key, String destPath) {
       echo "[SUCCESS] k8sGetConfig: Wrote '${destPath}' (\${bytes} bytes, sha256=\$sha) from ConfigMap '${cm}'"
     """
   )
+}
+
+/**
+ * Optimized project vars getter that uses cached data from pipelineSetup
+ */
+def getProjectVarsOptimized() {
+  if (env.PIPELINE_SETUP_COMPLETE == 'true' && env.PROJECT_VARS_JSON) {
+    try {
+      return readJSON text: env.PROJECT_VARS_JSON
+    } catch (Exception e) {
+      echo "[WARN] k8sGetConfig: Could not parse cached project vars, falling back to getProjectVars()"
+    }
+  }
+  return getProjectVars()
 }

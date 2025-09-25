@@ -192,7 +192,7 @@ def getBranchProtectionRules(Map params) {
 
 
 /**
- * Perform comprehensive permission check
+ * Perform comprehensive permission check (without agent validation)
  */
 def validateDeployPermissions(Map params = [:]) {
   def repoOwner = params.repoOwner ?: getRepoOwner()
