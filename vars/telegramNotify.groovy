@@ -209,7 +209,7 @@ def getEnvironmentName(branchName) {
 def getProjectVarsOptimized() {
   if (env.PIPELINE_SETUP_COMPLETE == 'true' && env.PROJECT_VARS_JSON) {
     try {
-      return readJSON text: env.PROJECT_VARS_JSON
+      return readJSON(text: env.PROJECT_VARS_JSON)
     } catch (Exception e) {
       echo "[WARN] telegramNotify: Could not parse cached project vars, falling back to getProjectVars()"
     }
