@@ -55,6 +55,9 @@ def call(Map config = [:]) {
     }
   }
 
+  // Get commit message for notifications
+  def commitMessage = getCommitMessage()
+
   // Set defaults and allow overrides
   def vars = [
     REPO_NAME: finalRepoName,
@@ -64,7 +67,8 @@ def call(Map config = [:]) {
     DEPLOYMENT: config.deployment ?: "${finalRepoName}-${sanitizedBranch}",
     APP_NAME: config.appName ?: "${finalRepoName}-${sanitizedBranch}",
     REGISTRY: registry,
-    COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest'
+    COMMIT_HASH: config.commitHash ?: env.GIT_COMMIT?.take(7) ?: 'latest',
+    COMMIT_MESSAGE: commitMessage
   ]
 
   // Auto-enable permission check if explicitly enabled or has GitHub token
@@ -168,6 +172,28 @@ Please contact a repository administrator.
   }
 
   return vars
+}
+
+/**
+ * Get commit message for notifications
+ */
+def getCommitMessage() {
+  try {
+    def commitMsg = sh(
+      script: "git log -1 --pretty=format:'%s' 2>/dev/null || echo 'No commit message'",
+      returnStdout: true
+    ).trim()
+
+    // Truncate long commit messages
+    if (commitMsg.length() > 100) {
+      commitMsg = commitMsg.substring(0, 97) + "..."
+    }
+
+    return commitMsg
+  } catch (Exception e) {
+    echo "[WARN] getProjectVars: Could not get commit message: ${e.getMessage()}"
+    return "No commit message available"
+  }
 }
 
 /**

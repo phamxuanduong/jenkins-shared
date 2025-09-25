@@ -125,19 +125,25 @@ def buildDefaultMessage(vars) {
     'NOT_BUILT': '⭕'
   ][status] ?: '❓'
 
+  // Get commit message from vars (cached from getProjectVars)
+  def commitMessage = vars.COMMIT_MESSAGE ?: 'No commit message'
+
+  // Escape markdown special characters for Telegram
+  def escapedCommitMsg = commitMessage.replaceAll(/[_*\[\]()~`>#+=|{}.!-]/) { "\\$it" }
+
   // Build message with Markdown formatting
   def message = """
 ${statusEmoji} *Build ${status}*
 
 📦 *Project:* `${vars.REPO_NAME}`
 🌿 *Branch:* `${vars.REPO_BRANCH}`
+👤 *User:* `${vars.GIT_USER ?: 'unknown'}`
 🏷️ *Tag:* `${vars.COMMIT_HASH}`
+
+💬 *Commit:* `${escapedCommitMsg}`
 
 ⏱️ *Duration:* ${duration}
 🔗 *Build:* [#${env.BUILD_NUMBER}](${buildUrl})
-
-*Deployment:* `${vars.DEPLOYMENT}`
-*Namespace:* `${vars.NAMESPACE}`
 """
 
   return message.trim()
