@@ -1,0 +1,39 @@
+@Library('jenkins-shared@main') _
+
+// Option 1: Simplest - Auto-detect everything
+pipeline {
+    agent {
+        label getAgentByBranch()
+    }
+
+    stages {
+        stage('Setup') {
+            steps { script { pipelineSetup() } }
+        }
+        stage('Build & Deploy') {
+            steps { script {
+                k8sGetConfig()
+                dockerBuildPush()
+                k8sSetImage()
+            }}
+        }
+    }
+    post {
+        success { script { telegramNotify() } }
+        failure { script { telegramNotify() } }
+    }
+}
+
+// Auto-select agent based on branch name
+def getAgentByBranch() {
+    def branch = env.BRANCH_NAME ?: env.GIT_BRANCH?.replaceAll('^origin/', '')
+    def lowerBranch = branch.toLowerCase()
+
+    if (lowerBranch.contains('prod') || lowerBranch.contains('main') || lowerBranch.contains('master')) {
+        return 'prod'
+    } else if (lowerBranch.contains('staging')) {
+        return 'staging'
+    } else {
+        return 'beta'  // default for dev/feature branches
+    }
+}

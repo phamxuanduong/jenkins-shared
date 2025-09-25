@@ -1,0 +1,56 @@
+@Library('jenkins-shared@main') _
+
+pipeline {
+    agent {
+        label """${
+            env.BRANCH_NAME?.toLowerCase()?.contains('prod') ||
+            env.BRANCH_NAME?.toLowerCase()?.contains('main') ||
+            env.BRANCH_NAME?.toLowerCase()?.contains('master') ? 'prod' :
+            env.BRANCH_NAME?.toLowerCase()?.contains('staging') ? 'staging' : 'beta'
+        }"""
+    }
+
+    stages {
+        stage('Agent Info') {
+            steps {
+                script {
+                    echo """
+🎯 Environment Detection:
+  Branch: ${env.BRANCH_NAME}
+  Selected Agent: ${env.NODE_NAME}
+  Environment: ${getEnvironmentName()}
+"""
+                }
+            }
+        }
+
+        stage('Setup') {
+            steps { script { pipelineSetup() } }
+        }
+
+        stage('Build & Deploy') {
+            steps { script {
+                k8sGetConfig()
+                dockerBuildPush()
+                k8sSetImage()
+            }}
+        }
+    }
+
+    post {
+        success { script { telegramNotify() } }
+        failure { script { telegramNotify() } }
+    }
+}
+
+def getEnvironmentName() {
+    def branch = env.BRANCH_NAME?.toLowerCase() ?: 'unknown'
+
+    if (branch.contains('prod') || branch.contains('main') || branch.contains('master')) {
+        return 'PRODUCTION'
+    } else if (branch.contains('staging')) {
+        return 'STAGING'
+    } else {
+        return 'BETA'
+    }
+}

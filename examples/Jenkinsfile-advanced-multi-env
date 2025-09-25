@@ -1,0 +1,195 @@
+@Library('jenkins-shared@main') _
+
+// Option 2: Advanced - With custom configurations per environment
+pipeline {
+    agent {
+        label getAgentByBranch()
+    }
+
+    stages {
+        stage('Environment Validation') {
+            steps {
+                script {
+                    validateEnvironmentAgent()
+                }
+            }
+        }
+
+        stage('Setup') {
+            steps {
+                script {
+                    // Custom config per environment
+                    def config = getEnvironmentConfig()
+                    pipelineSetup(config.pipelineSetup)
+                }
+            }
+        }
+
+        stage('Build & Deploy') {
+            steps {
+                script {
+                    def config = getEnvironmentConfig()
+
+                    k8sGetConfig(config.k8sGetConfig)
+                    dockerBuildPush(config.dockerBuildPush)
+                    k8sSetImage(config.k8sSetImage)
+                }
+            }
+        }
+
+        stage('Environment-Specific Tests') {
+            when {
+                anyOf {
+                    branch 'staging'
+                    branch 'main'
+                    branch 'prod'
+                }
+            }
+            steps {
+                script {
+                    echo "Running environment-specific tests for ${getEnvironmentName()}"
+                    // Add your tests here
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                telegramNotify([
+                    message: getCustomSuccessMessage()
+                ])
+            }
+        }
+        failure {
+            script {
+                telegramNotify([
+                    message: getCustomFailureMessage()
+                ])
+            }
+        }
+    }
+}
+
+// Auto-select agent with validation
+def getAgentByBranch() {
+    def branch = env.BRANCH_NAME ?: env.GIT_BRANCH?.replaceAll('^origin/', '')
+    def lowerBranch = branch.toLowerCase()
+
+    if (lowerBranch.contains('prod') || lowerBranch.contains('main') || lowerBranch.contains('master')) {
+        return 'prod'
+    } else if (lowerBranch.contains('staging')) {
+        return 'staging'
+    } else {
+        return 'beta'
+    }
+}
+
+// Validate agent matches environment
+def validateEnvironmentAgent() {
+    def expectedAgent = getAgentByBranch()
+    def currentAgent = env.NODE_NAME
+    def branch = env.BRANCH_NAME ?: env.GIT_BRANCH?.replaceAll('^origin/', '')
+
+    echo "[INFO] Branch: ${branch}"
+    echo "[INFO] Expected Agent: ${expectedAgent}"
+    echo "[INFO] Current Agent: ${currentAgent}"
+
+    if (!currentAgent.toLowerCase().contains(expectedAgent)) {
+        error """
+❌ AGENT MISMATCH!
+
+Branch '${branch}' should run on '${expectedAgent}' agent but is running on '${currentAgent}'.
+
+Please check your Jenkins configuration or branch naming.
+"""
+    }
+
+    echo "✅ Agent validation passed: ${currentAgent} is correct for ${branch}"
+}
+
+// Get environment name
+def getEnvironmentName() {
+    def branch = env.BRANCH_NAME ?: env.GIT_BRANCH?.replaceAll('^origin/', '')
+    def lowerBranch = branch.toLowerCase()
+
+    if (lowerBranch.contains('prod') || lowerBranch.contains('main') || lowerBranch.contains('master')) {
+        return 'PRODUCTION'
+    } else if (lowerBranch.contains('staging')) {
+        return 'STAGING'
+    } else {
+        return 'BETA'
+    }
+}
+
+// Environment-specific configurations
+def getEnvironmentConfig() {
+    def env = getEnvironmentName()
+
+    def configs = [
+        'PRODUCTION': [
+            pipelineSetup: [:],  // Use all defaults for prod
+            k8sGetConfig: [
+                generalConfigmap: 'prod-general',
+                items: ['.env': '.env', 'config.yaml': 'config.yaml']
+            ],
+            dockerBuildPush: [
+                // Additional prod-specific build args
+            ],
+            k8sSetImage: [
+                // Prod deployment settings
+            ]
+        ],
+        'STAGING': [
+            pipelineSetup: [:],
+            k8sGetConfig: [
+                generalConfigmap: 'staging-general'
+            ],
+            dockerBuildPush: [:],
+            k8sSetImage: [:]
+        ],
+        'BETA': [
+            pipelineSetup: [:],
+            k8sGetConfig: [:],  // Use all defaults
+            dockerBuildPush: [:],
+            k8sSetImage: [:]
+        ]
+    ]
+
+    return configs[env] ?: configs['BETA']
+}
+
+// Custom success message per environment
+def getCustomSuccessMessage() {
+    def env = getEnvironmentName()
+    def branch = env.BRANCH_NAME ?: env.GIT_BRANCH?.replaceAll('^origin/', '')
+
+    return """✅ *${env} Deployment Success!*
+
+📦 *Project:* `${env.REPO_NAME ?: env.JOB_NAME}`
+🌿 *Branch:* `${branch}`
+🏛️ *Environment:* `${env}`
+👤 *User:* `${env.GIT_USER ?: 'unknown'}`
+
+🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
+
+🎉 *${env} environment is now updated!*"""
+}
+
+// Custom failure message per environment
+def getCustomFailureMessage() {
+    def env = getEnvironmentName()
+    def branch = env.BRANCH_NAME ?: env.GIT_BRANCH?.replaceAll('^origin/', '')
+
+    return """❌ *${env} Deployment Failed!*
+
+📦 *Project:* `${env.REPO_NAME ?: env.JOB_NAME}`
+🌿 *Branch:* `${branch}`
+🏛️ *Environment:* `${env}`
+👤 *User:* `${env.GIT_USER ?: 'unknown'}`
+
+🔗 *Build:* [#${env.BUILD_NUMBER}](${env.BUILD_URL})
+
+⚠️ *${env} deployment needs attention!*"""
+}
