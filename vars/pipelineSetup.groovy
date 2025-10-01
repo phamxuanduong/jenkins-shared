@@ -1,3 +1,5 @@
+#!/usr/bin/env groovy
+
 /**
  * pipelineSetup - Complete pipeline initialization with permission validation
  *
@@ -9,7 +11,7 @@
  * - Pipeline termination if permissions are insufficient
  *
  * @param config Map of optional parameters:
- *   - All parameters from getProjectVars() are supported
+ *   - All parameters from sharedUtils.getProjectVars() are supported
  *   - enablePermissionCheck: Override permission checking (default: auto-detect)
  *   - customMessage: Custom blocked deployment message
  *   - failOnBlock: Whether to fail pipeline on permission block (default: true)
@@ -21,10 +23,9 @@ def call(Map config = [:]) {
 
   try {
     // Get project variables with integrated permission checking
-    def projectVars = getProjectVars(config)
+    def projectVars = sharedUtils.getProjectVars(config)
 
     // Set environment variables for subsequent stages to use
-    // This allows other functions to skip calling getProjectVars() again
     env.PIPELINE_SETUP_COMPLETE = 'true'
     env.REPO_NAME = projectVars.REPO_NAME
     env.REPO_BRANCH = projectVars.REPO_BRANCH
@@ -42,7 +43,10 @@ def call(Map config = [:]) {
     env.PROJECT_VARS_JSON = groovy.json.JsonOutput.toJson(projectVars)
 
     // Get domain from ingress (if exists)
-    def domain = getIngressDomain(projectVars.DEPLOYMENT, projectVars.NAMESPACE)
+    def domain = k8sGetIngress(
+      deployment: projectVars.DEPLOYMENT,
+      namespace: projectVars.NAMESPACE
+    )
     def domainLine = domain ? "🌐 Domain: ${domain}\n" : ""
 
     echo """
@@ -70,7 +74,7 @@ ${domainLine}"""
 
 📦 *Project:* `${env.JOB_NAME ?: 'Unknown'}`
 🌿 *Branch:* `${env.GIT_BRANCH?.replaceAll('^origin/', '') ?: env.BRANCH_NAME ?: 'Unknown'}`
-👤 *User:* `${getUserFromGit()}`
+👤 *User:* `${sharedUtils.getUserFromGit()}`
 
 ⚠️ *Error:* ${e.getMessage()}
 
@@ -88,63 +92,4 @@ ${domainLine}"""
     // Re-throw the exception to fail the pipeline
     throw e
   }
-}
-
-/**
- * Get project variables with cached result from pipelineSetup
- * This is an enhanced version that checks if pipelineSetup was already called
- */
-def getProjectVarsFromSetup() {
-  if (env.PIPELINE_SETUP_COMPLETE == 'true' && env.PROJECT_VARS_JSON) {
-    try {
-      return readJSON(text: env.PROJECT_VARS_JSON)
-    } catch (Exception e) {
-      echo "[WARN] pipelineSetup: Could not parse cached project vars, falling back to getProjectVars()"
-    }
-  }
-
-  // Fallback to regular getProjectVars if no cached data
-  return getProjectVars()
-}
-
-/**
- * Utility function to get git user (fallback for error scenarios)
- */
-def getUserFromGit() {
-  try {
-    return sh(
-      script: "git log -1 --pretty=format:'%an' 2>/dev/null || echo 'unknown'",
-      returnStdout: true
-    ).trim()
-  } catch (Exception e) {
-    return 'unknown'
-  }
-}
-
-/**
- * Get domains from ingress with same name as deployment
- */
-def getIngressDomain(deploymentName, namespace) {
-  if (!deploymentName || !namespace) {
-    return null
-  }
-
-  try {
-    def result = sh(
-      script: """
-        kubectl get ingress ${deploymentName} -n ${namespace} \
-          -o jsonpath='{.spec.rules[*].host}' 2>/dev/null || echo ''
-      """,
-      returnStdout: true
-    ).trim()
-
-    if (result) {
-      // Multiple domains separated by space, join with comma
-      return result.split(/\s+/).join(', ')
-    }
-  } catch (Exception e) {
-    // Silently ignore - ingress may not exist
-  }
-
-  return null
 }

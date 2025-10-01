@@ -1,3 +1,5 @@
+#!/usr/bin/env groovy
+
 /**
  * telegramNotify - Send Telegram notifications with auto environment routing
  *
@@ -21,7 +23,7 @@ def call(Map args = [:]) {
   }
 
   // Get project vars if not provided - use cached data if available
-  def vars = args.vars ?: getProjectVarsOptimized()
+  def vars = args.vars ?: sharedUtils.getProjectVarsOptimized()
 
   // Auto-select credentials based on environment if not explicitly provided
   String botToken = args.botToken ?: getEnvironmentBotToken(vars.REPO_BRANCH)
@@ -69,15 +71,10 @@ def call(Map args = [:]) {
     // Convert to JSON
     def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
 
-
-    // Send HTTP request using secure credential handling with fallback
-    def response = ''
-
-    // Use environment-specific bot token directly with proper JSON escaping
+    // Send HTTP request using secure credential handling
     def apiUrl = "https://api.telegram.org/bot${botToken}/sendMessage"
 
-    // Execute sh directly - we're already in a node context
-    response = sh(
+    def response = sh(
       script: """
       set +x
       # Use printf to properly escape JSON for shell
@@ -90,7 +87,7 @@ def call(Map args = [:]) {
       returnStdout: true
     ).trim()
 
-    // Parse response using readJSON from Pipeline Utility Steps plugin
+    // Parse response using readJSON
     def jsonResponse = readJSON text: response
 
     if (jsonResponse.ok) {
@@ -111,6 +108,9 @@ def call(Map args = [:]) {
   }
 }
 
+/**
+ * Build default notification message
+ */
 def buildDefaultMessage(vars) {
   def status = currentBuild.currentResult ?: 'UNKNOWN'
   def duration = currentBuild.durationString ?: 'Unknown'
@@ -129,10 +129,13 @@ def buildDefaultMessage(vars) {
   def commitMessage = vars.COMMIT_MESSAGE ?: 'No commit message'
 
   // Escape markdown special characters for Telegram
-  def escapedCommitMsg = commitMessage.replaceAll(/[_*\[\]()~`>#+=|{}.!-]/) { "\\$it" }
+  def escapedCommitMsg = sharedUtils.escapeMarkdown(commitMessage)
 
   // Get domain from ingress (if exists)
-  def domain = getIngressDomain(vars.DEPLOYMENT, vars.NAMESPACE)
+  def domain = k8sGetIngress(
+    deployment: vars.DEPLOYMENT,
+    namespace: vars.NAMESPACE
+  )
   def domainLine = domain ? "\n🌐 *Domain:* ${domain}" : ""
 
   // Build message with Markdown formatting
@@ -153,6 +156,9 @@ ${statusEmoji} *Build ${status}*
   return message.trim()
 }
 
+/**
+ * Get environment-specific bot token
+ */
 def getEnvironmentBotToken(branchName) {
   def lowerBranch = branchName.toLowerCase()
 
@@ -164,10 +170,13 @@ def getEnvironmentBotToken(branchName) {
              lowerBranch.contains('prod') || lowerBranch.contains('production')) {
     return env.TELEGRAM_BOT_TOKEN_PROD ?: env.TELEGRAM_BOT_TOKEN
   } else {
-    return env.TELEGRAM_BOT_TOKEN_BETA ?: env.TELEGRAM_BOT_TOKEN // fallback
+    return env.TELEGRAM_BOT_TOKEN_BETA ?: env.TELEGRAM_BOT_TOKEN
   }
 }
 
+/**
+ * Get environment-specific chat ID
+ */
 def getEnvironmentChatId(branchName) {
   def lowerBranch = branchName.toLowerCase()
 
@@ -179,10 +188,13 @@ def getEnvironmentChatId(branchName) {
              lowerBranch.contains('prod') || lowerBranch.contains('production')) {
     return env.TELEGRAM_CHAT_ID_PROD ?: env.TELEGRAM_CHAT_ID
   } else {
-    return env.TELEGRAM_CHAT_ID_BETA ?: env.TELEGRAM_CHAT_ID // fallback
+    return env.TELEGRAM_CHAT_ID_BETA ?: env.TELEGRAM_CHAT_ID
   }
 }
 
+/**
+ * Get environment-specific thread ID
+ */
 def getEnvironmentThreadId(branchName) {
   def lowerBranch = branchName.toLowerCase()
 
@@ -194,10 +206,13 @@ def getEnvironmentThreadId(branchName) {
              lowerBranch.contains('prod') || lowerBranch.contains('production')) {
     return env.TELEGRAM_THREAD_ID_PROD ?: env.TELEGRAM_THREAD_ID
   } else {
-    return env.TELEGRAM_THREAD_ID_BETA ?: env.TELEGRAM_THREAD_ID // fallback
+    return env.TELEGRAM_THREAD_ID_BETA ?: env.TELEGRAM_THREAD_ID
   }
 }
 
+/**
+ * Get environment name from branch
+ */
 def getEnvironmentName(branchName) {
   def lowerBranch = branchName.toLowerCase()
 
@@ -209,50 +224,6 @@ def getEnvironmentName(branchName) {
              lowerBranch.contains('prod') || lowerBranch.contains('production')) {
     return 'PRODUCTION'
   } else {
-    return 'BETA' // fallback
+    return 'BETA'
   }
-}
-
-/**
- * Optimized project vars getter that uses cached data from pipelineSetup
- */
-def getProjectVarsOptimized() {
-  if (env.PIPELINE_SETUP_COMPLETE == 'true' && env.PROJECT_VARS_JSON) {
-    try {
-      return readJSON(text: env.PROJECT_VARS_JSON)
-    } catch (Exception e) {
-      echo "[WARN] telegramNotify: Could not parse cached project vars, falling back to getProjectVars()"
-    }
-  }
-  return getProjectVars()
-}
-
-/**
- * Get domains from ingress with same name as deployment
- */
-def getIngressDomain(deploymentName, namespace) {
-  if (!deploymentName || !namespace) {
-    return null
-  }
-
-  try {
-    def result = sh(
-      script: """
-        kubectl get ingress ${deploymentName} -n ${namespace} \
-          -o jsonpath='{.spec.rules[*].host}' 2>/dev/null || echo ''
-      """,
-      returnStdout: true
-    ).trim()
-
-    if (result) {
-      // Multiple domains separated by space, join with comma
-      def domains = result.split(/\s+/).join(', ')
-      echo "[INFO] telegramNotify: Found domain(s) '${domains}' from ingress '${deploymentName}'"
-      return domains
-    }
-  } catch (Exception e) {
-    echo "[DEBUG] telegramNotify: No ingress found for '${deploymentName}' in namespace '${namespace}'"
-  }
-
-  return null
 }
