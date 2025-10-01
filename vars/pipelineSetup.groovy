@@ -41,6 +41,10 @@ def call(Map config = [:]) {
     // Store serialized project vars for functions that need the full object
     env.PROJECT_VARS_JSON = groovy.json.JsonOutput.toJson(projectVars)
 
+    // Get domain from ingress (if exists)
+    def domain = getIngressDomain(projectVars.DEPLOYMENT, projectVars.NAMESPACE)
+    def domainLine = domain ? "🌐 Domain: ${domain}\n" : ""
+
     echo """
 [SUCCESS] pipelineSetup: Pipeline initialization completed successfully!
 
@@ -52,7 +56,7 @@ def call(Map config = [:]) {
 📦 Registry: ${projectVars.REGISTRY}
 🚀 Deployment: ${projectVars.DEPLOYMENT}
 🏛️ Namespace: ${projectVars.NAMESPACE}
-"""
+${domainLine}"""
 
     // If we reach here, permissions are valid and pipeline can continue
     return projectVars
@@ -115,4 +119,31 @@ def getUserFromGit() {
   } catch (Exception e) {
     return 'unknown'
   }
+}
+
+/**
+ * Get domain from ingress with same name as deployment
+ */
+def getIngressDomain(deploymentName, namespace) {
+  if (!deploymentName || !namespace) {
+    return null
+  }
+
+  try {
+    def result = sh(
+      script: """
+        kubectl get ingress ${deploymentName} -n ${namespace} \
+          -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo ''
+      """,
+      returnStdout: true
+    ).trim()
+
+    if (result) {
+      return result
+    }
+  } catch (Exception e) {
+    // Silently ignore - ingress may not exist
+  }
+
+  return null
 }
