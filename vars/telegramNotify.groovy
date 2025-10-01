@@ -131,6 +131,10 @@ def buildDefaultMessage(vars) {
   // Escape markdown special characters for Telegram
   def escapedCommitMsg = commitMessage.replaceAll(/[_*\[\]()~`>#+=|{}.!-]/) { "\\$it" }
 
+  // Get domain from ingress (if exists)
+  def domain = getIngressDomain(vars.DEPLOYMENT, vars.NAMESPACE)
+  def domainLine = domain ? "\n🌐 *Domain:* ${domain}" : ""
+
   // Build message with Markdown formatting
   def message = """
 ${statusEmoji} *Build ${status}*
@@ -138,7 +142,7 @@ ${statusEmoji} *Build ${status}*
 📦 *Project:* `${vars.REPO_NAME}`
 🌿 *Branch:* `${vars.REPO_BRANCH}`
 👤 *User:* `${vars.GIT_USER ?: 'unknown'}`
-🏷️ *Tag:* `${vars.COMMIT_HASH}`
+🏷️ *Tag:* `${vars.COMMIT_HASH}`${domainLine}
 
 💬 *Commit:* `${escapedCommitMsg}`
 
@@ -221,4 +225,32 @@ def getProjectVarsOptimized() {
     }
   }
   return getProjectVars()
+}
+
+/**
+ * Get domain from ingress with same name as deployment
+ */
+def getIngressDomain(deploymentName, namespace) {
+  if (!deploymentName || !namespace) {
+    return null
+  }
+
+  try {
+    def result = sh(
+      script: """
+        kubectl get ingress ${deploymentName} -n ${namespace} \
+          -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo ''
+      """,
+      returnStdout: true
+    ).trim()
+
+    if (result) {
+      echo "[INFO] telegramNotify: Found domain '${result}' from ingress '${deploymentName}'"
+      return result
+    }
+  } catch (Exception e) {
+    echo "[DEBUG] telegramNotify: No ingress found for '${deploymentName}' in namespace '${namespace}'"
+  }
+
+  return null
 }
