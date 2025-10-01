@@ -1,581 +1,554 @@
 # Jenkins Shared Library
 
-Thư viện chung Jenkins cung cấp các hàm tiện ích cho CI/CD pipeline với khả năng tự động hóa hoàn toàn.
+Modern Jenkins shared library cho CI/CD automation với kiến trúc modular và zero-configuration.
 
 ## 🚀 Quick Start
 
-### Jenkinsfile đơn giản nhất (1 dòng):
+### Cách đơn giản nhất - 2 dòng code:
+
 ```groovy
 @Library('jenkins-shared@main') _
-
-pipeline {
-  agent { label 'your-agent' }
-  stages {
-    stage('Get Config') {
-      steps { script { k8sGetConfig() } }
-    }
-    stage('Build & Push') {
-      steps { script { dockerBuildPush() } }
-    }
-    stage('Deploy') {
-      steps { script { k8sSetImage() } }
-    }
-  }
-  post {
-    always { script { telegramNotify() } }
-  }
-}
+ci()
 ```
 
-## Cài đặt
+Chỉ vậy thôi! Pipeline sẽ tự động:
+- ✅ Setup project variables từ Git
+- ✅ Kiểm tra GitHub permissions (nếu có)
+- ✅ Lấy ConfigMaps từ Kubernetes
+- ✅ Build và push Docker image
+- ✅ Deploy lên Kubernetes
+- ✅ Gửi thông báo Telegram
 
-1. Thêm shared library vào Jenkins:
-   - Vào **Manage Jenkins** > **Configure System**
-   - Tìm phần **Global Pipeline Libraries**
-   - Thêm library với tên `jenkins-shared`
-   - Cấu hình Git repository URL
+## 📚 Cài đặt
 
-2. Hoặc cấu hình trong Jenkinsfile:
+### Cách 1: Global Pipeline Library (Khuyến nghị)
+
+1. Vào **Manage Jenkins** > **Configure System**
+2. Tìm **Global Pipeline Libraries**
+3. Thêm library:
+   - Name: `jenkins-shared`
+   - Default version: `main`
+   - Retrieval method: Modern SCM
+   - Source Code Management: Git
+   - Project Repository: `https://github.com/phamxuanduong/jenkins-shared.git`
+
+### Cách 2: Project-level (Trong Jenkinsfile)
+
 ```groovy
 @Library('jenkins-shared@main') _
 ```
 
-## 🎯 Tính năng chính
+## 🎯 Core Functions
 
-- **Hoàn toàn tự động**: Tất cả hàm có thể gọi không cần tham số
-- **🔒 Branch Protection**: Tự động kiểm tra GitHub branch protection và user permissions
-- **Dual ConfigMap**: Hỗ trợ ConfigMap `general` (chung) và branch-specific
-- **Smart registry**: Tự động chọn registry theo branch pattern
-- **Branch sanitization**: Tự động xử lý branch names cho Kubernetes
-- **Override linh hoạt**: Có thể override bất kỳ tham số nào khi cần
-- **📱 Security Alerts**: Telegram notifications khi deployment bị block
+### `ci()` - Complete CI/CD Pipeline
 
-## 📚 Documentation
-
-### Detailed Documentation
-- **[githubApi](./docs/githubApi.md)** - 🔒 GitHub API integration với branch protection và permission checks
-- **[telegramNotify](./docs/telegramNotify.md)** - Telegram notifications với rich formatting
-- **[swarmSetImage](./docs/swarmSetImage.md)** - Docker Swarm service deployment
-- **[k8sGetConfig](./docs/k8sGetConfig.md)** - ConfigMap management với dual ConfigMap support
-- **[getProjectVars](./docs/getProjectVars.md)** - Auto-detect project variables từ Git
-- **[Docker Functions](./docs/docker-functions.md)** - Build và push Docker images
-- **[Kubernetes Functions](./docs/k8s-functions.md)** - Deployment và Kubernetes operations
-- **[Troubleshooting](./docs/troubleshooting.md)** - Debug guide và common issues
-
-## Các hàm có sẵn
-
-### telegramNotify 📱
-**Gửi thông báo Telegram về build status**
+Hàm wrapper hoàn chỉnh orchestrate toàn bộ pipeline.
 
 ```groovy
-// Tự động tạo message từ build info
-telegramNotify()
+// Đơn giản nhất
+@Library('jenkins-shared@main') _
+ci()
 
-// Custom message
-telegramNotify(
-    message: "✅ *Deploy thành công!*\n\nApp: `my-app`"
-)
+// Với custom steps
+@Library('jenkins-shared@main') _
+ci([
+  beforeBuild: {
+    sh 'npm install'
+    sh 'npm test'
+  },
+  afterDeploy: {
+    sh 'kubectl rollout status deployment/my-app'
+  }
+])
 
-// Silent notification
-telegramNotify(disableNotification: true)
+// Skip các bước không cần
+@Library('jenkins-shared@main') _
+ci([
+  skipConfigMap: true,  // Không cần ConfigMap
+  skipDeploy: true      // Chỉ build, không deploy
+])
 ```
 
-### dockerBuild
-Xây dựng Docker image.
+**Tham số:**
+- `agent`: Jenkins agent label (mặc định: auto-detect từ branch)
+- `skipConfigMap`: Skip k8sGetConfigMap (mặc định: false)
+- `skipBuild`: Skip Docker build (mặc định: false)
+- `skipPush`: Skip Docker push (mặc định: false)
+- `skipDeploy`: Skip k8sSetImage (mặc định: false)
+- `skipNotification`: Skip Telegram (mặc định: false)
+- `beforeBuild`: Closure chạy trước build
+- `afterDeploy`: Closure chạy sau deploy
 
-**Tham số (tất cả tùy chọn):**
-- `image`: Tên image (mặc định: tự động từ `getProjectVars()`)
-- `tag`: Tag cho image (mặc định: tự động từ commit hash)
-- `dockerfile`: Đường dẫn Dockerfile (mặc định: 'Dockerfile')
-- `context`: Build context (mặc định: '.')
-- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
+### `pipelineSetup()` - Project Initialization
 
-**Ví dụ:**
+Setup project variables và kiểm tra permissions.
+
 ```groovy
-// Hoàn toàn tự động
-dockerBuild()
+def vars = pipelineSetup()
 
-// Chỉ định dockerfile khác
-dockerBuild(dockerfile: 'docker/Dockerfile')
-
-// Custom image và tag
-dockerBuild(
-    image: '172.16.3.0/mtw/my-app',
-    tag: 'v1.0.0'
-)
+echo "Deploying ${vars.APP_NAME} to ${vars.NAMESPACE}"
 ```
 
-### dockerPush
-Đẩy Docker image lên registry.
+**Auto-detected variables:**
+- `REPO_NAME`: Tên repository từ Git URL
+- `REPO_BRANCH`: Tên branch hiện tại
+- `SANITIZED_BRANCH`: Branch name sanitized cho K8s
+- `NAMESPACE`: Kubernetes namespace (= REPO_NAME)
+- `DEPLOYMENT`: Deployment name (= REPO_NAME-SANITIZED_BRANCH)
+- `APP_NAME`: Application name (= REPO_NAME-SANITIZED_BRANCH)
+- `REGISTRY`: Docker registry (auto-select theo branch)
+- `COMMIT_HASH`: Git commit hash (7 ký tự đầu)
+- `GIT_USER`: Git user từ commit
+- `CAN_DEPLOY`: Permission check result
+- `COMMIT_MESSAGE`: Commit message
 
-**Tham số (tất cả tùy chọn):**
-- `image`: Tên image (mặc định: tự động từ `getProjectVars()`)
-- `tag`: Tag của image (mặc định: tự động từ commit hash)
-- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
+### `dockerBuildImage()` - Build Docker Image
 
-**Ví dụ:**
 ```groovy
-// Hoàn toàn tự động
-dockerPush()
+// Auto-detect tất cả
+dockerBuildImage()
 
-// Custom image và tag
-dockerPush(
-    image: '172.16.3.0/mtw/my-app',
-    tag: 'v1.0.0'
-)
-```
-
-### dockerBuildPush
-Xây dựng và đẩy Docker image trong một bước.
-
-**Tham số (tất cả tùy chọn):**
-- `image`: Tên image (mặc định: tự động từ `getProjectVars()`)
-- `tag`: Tag cho image (mặc định: tự động từ commit hash)
-- `dockerfile`: Đường dẫn Dockerfile (mặc định: 'Dockerfile')
-- `context`: Build context (mặc định: '.')
-- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
-
-**Ví dụ:**
-```groovy
-// Hoàn toàn tự động
-dockerBuildPush()
-
-// Chỉ định dockerfile khác
-dockerBuildPush(dockerfile: 'docker/Dockerfile')
-
-// Custom image và tag
-dockerBuildPush(
-    image: '172.16.3.0/mtw/my-app',
-    tag: 'v1.0.0'
-)
-```
-
-### k8sSetImage
-Cập nhật image cho Kubernetes deployment.
-
-**Tham số (tất cả tùy chọn):**
-- `deployment`: Tên deployment (mặc định: tự động từ `getProjectVars()`)
-- `image`: Tên image mới (mặc định: tự động từ `getProjectVars()`)
-- `tag`: Tag của image (mặc định: tự động từ commit hash)
-- `namespace`: Kubernetes namespace (mặc định: tự động từ repo name)
-- `container`: Tên container cụ thể (mặc định: '*' - tất cả containers)
-- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
-
-**Ví dụ:**
-```groovy
-// Hoàn toàn tự động
-k8sSetImage()
-
-// Custom deployment name
-k8sSetImage(deployment: 'my-custom-deployment')
-
-// Đầy đủ custom
-k8sSetImage(
-    deployment: 'hyra-one-base-api-beta-api',
-    image: '172.16.3.0/mtw/hyra-one-base-api-beta-api',
-    tag: 'v1.0.0',
-    namespace: 'hyra-one-base-api'
-)
-```
-
-### k8sGetConfig
-Lấy dữ liệu từ Kubernetes ConfigMap và lưu vào file. Tự động lấy từ 2 ConfigMaps: `general` (chung) và branch-specific.
-
-**Tham số (tất cả tùy chọn):**
-- `namespace`: Kubernetes namespace (mặc định: tự động từ `getProjectVars().NAMESPACE`)
-- `configmap`: Tên ConfigMap theo branch (mặc định: tự động từ `getProjectVars().SANITIZED_BRANCH`)
-- `generalConfigmap`: Tên ConfigMap chung (mặc định: 'general')
-- `items`: Map các key và đường dẫn file đích (mặc định: lấy tất cả keys từ cả 2 ConfigMaps)
-- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
-
-**Mặc định tự động:**
-- `namespace` = REPO_NAME (từ Git URL)
-- `generalConfigmap` = 'general' (chứa files dùng chung cho tất cả branches)
-- `configmap` = SANITIZED_BRANCH (chứa files riêng cho branch này)
-- Lấy tất cả data từ cả 2 ConfigMaps
-- Files từ branch ConfigMap sẽ override files từ general ConfigMap (nếu cùng tên)
-- Tự động bỏ qua nếu ConfigMap/key không tồn tại
-
-**Workflow:**
-1. Lấy tất cả files từ ConfigMap `general` (files dùng chung)
-2. Lấy tất cả files từ ConfigMap theo branch (files riêng cho branch)
-3. Files từ branch sẽ ghi đè lên files chung nếu trùng tên
-
-**Implementation Details:**
-- **Key extraction**: Sử dụng `kubectl -o yaml` + `awk` để parse ConfigMap keys
-- **Special characters**: Hỗ trợ keys có dấu chấm (`.env`) và ký tự đặc biệt
-- **Data fetching**: Dùng `go-template` với `index` function cho keys có ký tự đặc biệt
-- **Error handling**: Graceful skip nếu ConfigMap/key không tồn tại
-- **Multi-line support**: Hỗ trợ content nhiều dòng từ ConfigMap
-
-**Troubleshooting:**
-- Nếu `.env` báo empty: Check ConfigMap có data với `kubectl describe configmap`
-- Nếu keys không được detect: Check YAML format với `kubectl get cm -o yaml`
-- Nếu special keys fail: Function dùng `go-template index` để handle tất cả key types
-
-**Ví dụ:**
-```groovy
-// Hoàn toàn tự động - lấy từ 'general' và branch hiện tại
-k8sGetConfig()
-
-// Custom general ConfigMap name
-k8sGetConfig(generalConfigmap: 'shared')
-
-// Chỉ định specific items
-k8sGetConfig(
-    items: [
-        'Dockerfile': 'Dockerfile',
-        '.env': '.env',
-        'config.yaml': 'config/app.yaml'
-    ]
-)
+// Custom dockerfile
+dockerBuildImage(dockerfile: 'docker/Dockerfile.prod')
 
 // Full custom
-k8sGetConfig(
-    namespace: 'my-namespace',
-    generalConfigmap: 'shared-config',
-    configmap: 'beta-config',
-    items: [
-        'Dockerfile': 'build/Dockerfile',
-        '.env': 'deploy/.env'
-    ]
+dockerBuildImage(
+  image: 'my-registry/my-app',
+  tag: 'v1.0.0',
+  dockerfile: 'Dockerfile',
+  context: '.'
 )
 ```
 
-**Ví dụ ConfigMap setup:**
+### `dockerPushImage()` - Push Docker Image
+
+```groovy
+// Auto-detect
+dockerPushImage()
+
+// Custom
+dockerPushImage(
+  image: 'my-registry/my-app',
+  tag: 'v1.0.0'
+)
+```
+
+### `k8sGetConfigMap()` - Fetch ConfigMaps
+
+Lấy config từ 2 ConfigMaps: `general` (shared) và branch-specific.
+
+```groovy
+// Auto-fetch từ cả 2 ConfigMaps
+k8sGetConfigMap()
+
+// Custom ConfigMap names
+k8sGetConfigMap(
+  generalConfigmap: 'shared',
+  configmap: 'prod-config'
+)
+
+// Chỉ lấy specific keys
+k8sGetConfigMap(
+  items: [
+    'Dockerfile': 'Dockerfile',
+    '.env': '.env'
+  ]
+)
+```
+
+**ConfigMap Structure:**
 ```yaml
-# ConfigMap general (shared)
+# general (shared across branches)
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: general
   namespace: my-app
 data:
-  .env: |
-    ENV=production
-    DATABASE_CONNECTION=mysql
   docker-compose.yml: |
     version: '3'
     services: ...
 
-# ConfigMap beta-api (branch-specific)
+---
+# prod (branch-specific)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: beta-api
+  name: prod
   namespace: my-app
 data:
   Dockerfile: |
     FROM node:18
     COPY . /app
   .env: |
-    ENV=beta
-    DEBUG=true
-    # Override .env từ general
+    NODE_ENV=production
 ```
 
-### getProjectVars
-Lấy các biến dự án tự động từ Git và environment, có thể override.
+### `k8sSetImage()` - Deploy to Kubernetes
 
-**Tham số (tất cả tùy chọn):**
-- `repoName`: Tên repository (mặc định: tự động từ GIT_URL)
-- `repoBranch`: Tên branch (mặc định: tự động từ GIT_BRANCH)
-- `namespace`: Kubernetes namespace (mặc định: repoName)
-- `deployment`: Tên deployment (mặc định: "{repoName}-{repoBranch}")
-- `appName`: Tên ứng dụng (mặc định: repoName)
-- `registry`: Docker registry (mặc định: env.DOCKER_REGISTRY hoặc '172.16.3.0/mtw')
-- `commitHash`: Git commit hash (mặc định: env.GIT_COMMIT?.take(7))
-
-**Mặc định tự động:**
-- NAMESPACE = REPO_NAME (ví dụ: `hyra-one-base-api`)
-- DEPLOYMENT = REPO_NAME-SANITIZED_BRANCH (ví dụ: `hyra-one-base-api-beta-api`)
-- APP_NAME = REPO_NAME-SANITIZED_BRANCH (ví dụ: `hyra-one-base-api-beta-api`)
-- REGISTRY tự động chọn theo branch:
-  - Branch chứa `dev`, `beta` → `env.REGISTRY_BETA`
-  - Branch chứa `staging` → `env.REGISTRY_STAGING`
-  - Branch chứa `main`, `master`, `prod`, `production` → `env.REGISTRY_PROD`
-  - Các branch khác → `env.REGISTRY_BETA` (mặc định)
-
-**Trả về:** Map chứa các biến: REPO_NAME, REPO_BRANCH, SANITIZED_BRANCH, NAMESPACE, DEPLOYMENT, APP_NAME, REGISTRY, COMMIT_HASH
-
-**Ví dụ:**
 ```groovy
-script {
-    def vars = getProjectVars()
-
-    // Tự động từ Git:
-    // NAMESPACE = hyra-one-base-api (repo name)
-    // DEPLOYMENT = hyra-one-base-api-main (repo-branch)
-    // REGISTRY tự động chọn:
-    //   - main branch → env.REGISTRY_PROD
-    //   - develop branch → env.REGISTRY_BETA
-    //   - staging branch → env.REGISTRY_STAGING
-
-    dockerBuildPush(
-        image: "${vars.REGISTRY}/${vars.APP_NAME}",
-        tag: vars.COMMIT_HASH
-    )
-
-    k8sSetImage(
-        deployment: vars.DEPLOYMENT,
-        image: "${vars.REGISTRY}/${vars.APP_NAME}",
-        tag: vars.COMMIT_HASH,
-        namespace: vars.NAMESPACE
-    )
-}
-```
-
-### k8sSetImage
-Cập nhật Kubernetes deployment với Docker image mới.
-
-**Tham số (tất cả tùy chọn):**
-- `deployment`: Tên deployment (mặc định: auto từ getProjectVars)
-- `image`: Docker image name (mặc định: auto từ getProjectVars)
-- `tag`: Image tag (mặc định: commit hash)
-- `namespace`: Kubernetes namespace (mặc định: auto từ getProjectVars)
-- `container`: Container name pattern (mặc định: '*' cho tất cả)
-- `vars`: Project variables (mặc định: tự động gọi `getProjectVars()`)
-
-**Ví dụ:**
-```groovy
-// Hoàn toàn tự động
+// Auto-detect deployment
 k8sSetImage()
 
-// Custom image và tag
+// Custom deployment
 k8sSetImage(
-    image: "my-registry/my-app",
-    tag: "v1.2.3"
+  deployment: 'my-app-prod',
+  image: 'registry/my-app',
+  tag: 'v1.0.0',
+  namespace: 'production'
 )
 ```
 
-### swarmSetImage 🐳
-**Deploy tới Docker Swarm cluster**
+### `k8sGetIngress()` - Get Ingress Info
 
 ```groovy
-// Auto-detect service name: {repoName}_{sanitizedBranch}
-swarmSetImage()
+// Get domains as comma-separated string
+def domains = k8sGetIngress()
+echo "Domains: ${domains}"  // api.example.com, www.example.com
 
-// Custom service name
-swarmSetImage(
-    service: "my-custom-service",
-    context: "production-swarm"
-)
+// Get hosts as array
+def hosts = k8sGetIngress(outputFormat: 'hosts')
 
-// Complete Swarm deployment
-dockerBuildPush()  // Build và push image
-swarmSetImage()    // Update Swarm service
+// Get full YAML
+def yaml = k8sGetIngress(outputFormat: 'yaml')
+
+// Get as JSON object
+def ingress = k8sGetIngress(outputFormat: 'json')
 ```
 
-## Jenkinsfile hoàn chỉnh
+### `telegramNotify()` - Telegram Notifications
 
-### Cách 1: Sử dụng getProjectVars (Linh hoạt)
+Tự động gửi thông báo với environment-specific routing.
+
+```groovy
+// Auto-generate message từ build info
+telegramNotify()
+
+// Custom message
+telegramNotify(
+  message: "✅ *Deploy Success!*\n\nApp: `my-app`"
+)
+
+// Silent notification
+telegramNotify(disableNotification: true)
+```
+
+**Environment Routing:**
+- Branch `beta`, `dev` → `TELEGRAM_BOT_TOKEN_BETA` + `TELEGRAM_CHAT_ID_BETA`
+- Branch `staging` → `TELEGRAM_BOT_TOKEN_STAGING` + `TELEGRAM_CHAT_ID_STAGING`
+- Branch `main`, `prod` → `TELEGRAM_BOT_TOKEN_PROD` + `TELEGRAM_CHAT_ID_PROD`
+
+## 🔧 Shared Utilities
+
+### `sharedUtils` - Common Helper Functions
+
+Internal utility functions (không cần gọi trực tiếp trong projects):
+
+- `getProjectVars()`: Get all project variables
+- `getProjectVarsOptimized()`: Get cached vars from pipelineSetup
+- `getUserFromGit()`: Get git user from commit
+- `getCommitMessage()`: Get commit message
+- `getRepoOwner()`: Extract repo owner from Git URL
+- `getRepoName()`: Extract repo name from Git URL
+- `escapeMarkdown()`: Escape Telegram markdown
+- GitHub API functions: `checkUserPermissions()`, `getBranchProtectionRules()`, `validateDeployPermissions()`
+
+## 📋 Complete Examples
+
+### Example 1: Simple Web App
+
+```groovy
+@Library('jenkins-shared@main') _
+ci()
+```
+
+### Example 2: With Tests
+
+```groovy
+@Library('jenkins-shared@main') _
+ci([
+  beforeBuild: {
+    sh 'npm install'
+    sh 'npm test'
+    sh 'npm run lint'
+  }
+])
+```
+
+### Example 3: Build Only (No Deploy)
+
+```groovy
+@Library('jenkins-shared@main') _
+ci([
+  skipDeploy: true,
+  afterDeploy: {
+    echo "Image built and pushed: ${env.APP_NAME}:${env.COMMIT_HASH}"
+  }
+])
+```
+
+### Example 4: Custom Agent
+
+```groovy
+@Library('jenkins-shared@main') _
+ci([
+  agent: 'docker',
+  skipConfigMap: true
+])
+```
+
+### Example 5: Manual Pipeline (Full Control)
+
 ```groovy
 @Library('jenkins-shared@main') _
 
-def VARS
-
 pipeline {
-  agent { label 'beta' }
+  agent {
+    label "${['beta','staging','prod'].find { p -> env.BRANCH_NAME?.equalsIgnoreCase(p) } ?: ''}"
+  }
 
   stages {
     stage('Setup') {
       steps {
         script {
-          VARS = getProjectVars()
+          def vars = pipelineSetup()
+          echo "Deploying ${vars.APP_NAME}"
         }
       }
     }
 
-    stage('K8s get Configmap') {
-      steps {
-        script {
-          k8sGetConfig(vars: VARS)
-        }
-      }
+    stage('Get Config') {
+      steps { script { k8sGetConfigMap() } }
     }
 
-    stage('Build & Push') {
-      steps {
-        script {
-          dockerBuildPush(vars: VARS)
-        }
-      }
+    stage('Build') {
+      steps { script { dockerBuildImage() } }
+    }
+
+    stage('Push') {
+      steps { script { dockerPushImage() } }
     }
 
     stage('Deploy') {
-      steps {
-        script {
-          k8sSetImage(vars: VARS)
-        }
-      }
-    }
-  }
-}
-```
-
-### Cách 2: Hoàn toàn tự động (Đơn giản nhất)
-```groovy
-@Library('jenkins-shared@main') _
-
-pipeline {
-  agent { label 'beta' }
-
-  stages {
-    stage('K8s get Configmap') {
-      steps {
-        script {
-          k8sGetConfig()
-        }
-      }
-    }
-
-    stage('Build & Push') {
-      steps {
-        script {
-          dockerBuildPush()
-        }
-      }
-    }
-
-    stage('Deploy to K8s') {
-      steps {
-        script {
-          k8sSetImage()
-        }
-      }
-    }
-
-    stage('Deploy to Swarm') {
-      steps {
-        script {
-          swarmSetImage()
-        }
-      }
+      steps { script { k8sSetImage() } }
     }
   }
 
   post {
-    success {
-      script {
-        telegramNotify()
-      }
-    }
-    failure {
-      script {
-        telegramNotify(
-          message: "❌ *Build Failed*\n\nProject: `${env.JOB_NAME}`\nBuild: [#${env.BUILD_NUMBER}](${env.BUILD_URL})"
-        )
-      }
-    }
+    success { script { telegramNotify() } }
+    failure { script { telegramNotify() } }
   }
 }
 ```
 
-## 🔧 Setup Jenkins Environment Variables
+## 🔒 Security & Permissions
 
-Cần thiết lập các biến môi trường trong Jenkins:
+### GitHub Branch Protection
 
+Tự động kiểm tra permissions khi có `GITHUB_TOKEN`:
+
+**Setup trong Jenkins:**
 ```bash
-# Jenkins Global Environment Variables
+# Credentials
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**Setup trong GitHub Repository Variables:**
+```
+BRANCH_PROTECT_ADMIN=prod,main
+BRANCH_PROTECT_MAINTAIN=staging
+```
+
+**Scenarios:**
+- ✅ Protected branch + Admin user → Deploy allowed
+- 🚫 Protected branch + Non-admin user → Deploy blocked + Telegram alert
+- ✅ Non-protected branch → Deploy allowed
+- ✅ No GitHub token → Deploy allowed (fallback)
+
+### Environment Variables
+
+**Required cho Telegram:**
+```bash
+# Beta/Dev environment
+TELEGRAM_BOT_TOKEN_BETA=123456:ABC...
+TELEGRAM_CHAT_ID_BETA=-1001234567890
+TELEGRAM_THREAD_ID_BETA=123  # Optional
+
+# Staging environment
+TELEGRAM_BOT_TOKEN_STAGING=123456:ABC...
+TELEGRAM_CHAT_ID_STAGING=-1001234567890
+
+# Production environment
+TELEGRAM_BOT_TOKEN_PROD=123456:ABC...
+TELEGRAM_CHAT_ID_PROD=-1001234567890
+```
+
+**Optional cho Registry:**
+```bash
 REGISTRY_BETA=registry-beta.company.com
 REGISTRY_STAGING=registry-staging.company.com
 REGISTRY_PROD=registry-prod.company.com
 ```
 
-## 🚀 Workflow tiêu chuẩn
+## 🏗️ Architecture
 
-### Automatic CI/CD Flow
-1. **Setup**: Auto-detect project info từ Git (repo, branch, commit)
-2. **ConfigMap**: Lấy configs từ `general` + branch-specific ConfigMaps
-3. **Build**: Build Docker image với auto-generated name và commit tag
-4. **Push**: Push lên registry được auto-select theo branch pattern
-5. **Deploy**: Update K8s deployment với image mới
+```
+vars/
+├── ci.groovy                   # Main wrapper - single entry point
+├── sharedUtils.groovy          # Shared utilities & GitHub API
+├── pipelineSetup.groovy        # Project initialization
+├── dockerBuildImage.groovy     # Build Docker image
+├── dockerPushImage.groovy      # Push Docker image
+├── k8sGetConfigMap.groovy      # Fetch Kubernetes ConfigMaps
+├── k8sGetIngress.groovy        # Get Kubernetes Ingress info
+├── k8sSetImage.groovy          # Deploy to Kubernetes
+├── swarmSetImage.groovy        # Deploy to Docker Swarm
+└── telegramNotify.groovy       # Telegram notifications
+```
 
-### Registry Selection Logic
-- `develop`, `dev-*`, `beta`, `beta-*` → `REGISTRY_BETA`
-- `staging`, `staging-*` → `REGISTRY_STAGING`
-- `main`, `master`, `prod`, `production` → `REGISTRY_PROD`
-- Các branch khác → `REGISTRY_BETA` (fallback)
+**Design Principles:**
+- ✅ **Zero Configuration**: Works out of the box
+- ✅ **Single Source of Truth**: All logic centralized
+- ✅ **Modular**: Each function has single responsibility
+- ✅ **Extensible**: Easy to add custom steps
+- ✅ **Maintainable**: Changes in library, not in projects
 
-### Branch Sanitization
-- `beta/api` → `beta-api` (K8s compatible)
-- `feature/user-auth` → `feature-user-auth`
-- Tự động handle special characters
+## 🎓 Best Practices
 
-## 🔍 Key Features
+### 1. Use `ci()` for Standard Workflows
 
-- **Zero Configuration**: Tất cả hàm hoạt động mà không cần parameters
-- **Smart Defaults**: Auto-detect mọi thứ từ Git và environment
-- **Dual ConfigMap**: Support shared + branch-specific configurations
-- **Error Resilient**: Graceful handling của missing resources
-- **Debug Friendly**: Chi tiết logs và troubleshooting guides
-- **Kubernetes Native**: Tuân thủ K8s naming conventions
+```groovy
+@Library('jenkins-shared@main') _
+ci()
+```
 
-## 🔒 Security & Permissions
+### 2. Add Custom Steps with Hooks
 
-### Branch Protection Integration
+```groovy
+@Library('jenkins-shared@main') _
+ci([
+  beforeBuild: { sh 'npm test' },
+  afterDeploy: { sh 'kubectl rollout status deployment/app' }
+])
+```
 
-Jenkins Shared Library tự động kiểm tra GitHub branch protection và user permissions:
+### 3. Skip Unnecessary Steps
+
+```groovy
+@Library('jenkins-shared@main') _
+ci([skipConfigMap: true])  // No ConfigMap needed
+```
+
+### 4. Use Manual Pipeline for Complex Workflows
 
 ```groovy
 @Library('jenkins-shared@main') _
 
 pipeline {
   agent { label 'beta' }
-
   stages {
     stage('Setup') {
-      steps {
-        script {
-          // Permission check tự động ở đây
-          VARS = getProjectVars()
-          // Pipeline sẽ dừng nếu user không có quyền
-        }
-      }
+      steps { script { pipelineSetup() } }
     }
-    // ... stages khác sẽ bị skip nếu không có quyền
+    // ... your custom stages
   }
 }
 ```
 
-### Required Environment Variables
+## 🆘 Troubleshooting
 
-```bash
-# GitHub API access (required cho permission checks)
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+### Pipeline Fails at Setup
 
-# Telegram notifications (từ telegramNotify)
-TELEGRAM_BOT_TOKEN_BETA=123456789:ABCDEFghijklmnopqrstuvwxyz123456789
-TELEGRAM_CHAT_ID_BETA=-1001234567890
+**Check:**
+1. Git repository accessible
+2. Branch name correct
+3. Jenkins has kubectl access
+
+### Docker Build Fails
+
+**Check:**
+1. Dockerfile exists in workspace
+2. Docker daemon accessible from agent
+3. Registry credentials configured
+
+### Kubernetes Deploy Fails
+
+**Check:**
+1. kubectl configured correctly
+2. Namespace exists
+3. Deployment exists
+4. Image pull secrets configured
+
+### Telegram Not Working
+
+**Check:**
+1. `TELEGRAM_BOT_TOKEN_*` environment variables set
+2. `TELEGRAM_CHAT_ID_*` environment variables set
+3. Bot added to chat/channel
+4. Bot has permission to send messages
+
+### Permission Check Failing
+
+**Check:**
+1. `GITHUB_TOKEN` has correct permissions
+2. Repository variables configured correctly
+3. User has required permissions on GitHub
+
+## 📝 Migration Guide
+
+### From Old Pipeline to `ci()`
+
+**Before:**
+```groovy
+@Library('jenkins-shared@main') _
+
+pipeline {
+  agent { label 'beta' }
+  stages {
+    stage('Setup') { steps { script { pipelineSetup() } } }
+    stage('Build & Deploy') {
+      steps {
+        script {
+          k8sGetConfigMap()
+          dockerBuildImage()
+          dockerPushImage()
+          k8sSetImage()
+        }
+      }
+    }
+  }
+  post {
+    success { script { telegramNotify() } }
+    failure { script { telegramNotify() } }
+  }
+}
 ```
 
-### Security Features
-
-- **🔍 Branch Protection Detection**: Tự động detect protected branches
-- **👤 User Permission Validation**: Kiểm tra admin access của user
-- **🚫 Automatic Pipeline Blocking**: Dừng deployment khi không đủ quyền
-- **📱 Security Alerts**: Telegram notification khi bị block
-- **🛡️ Graceful Fallback**: Cho phép deploy nếu GitHub API không khả dụng
-
-### Permission Scenarios
-
-```
-✅ Protected branch + Admin user → Deploy allowed
-🚫 Protected branch + Non-admin user → Deploy blocked + Alert sent
-✅ Non-protected branch + Any user → Deploy allowed
-✅ No GitHub token configured → Deploy allowed (fallback)
+**After:**
+```groovy
+@Library('jenkins-shared@main') _
+ci()
 ```
 
-Chi tiết: **[GitHub API Documentation](./docs/githubApi.md)**
+**Benefit:**
+- From 30 lines → 2 lines
+- No changes needed when library updates
+- Consistent across all projects
 
-## 🆘 Need Help?
+## 📖 Further Reading
 
-1. **Check logs**: Tất cả functions có detailed logging
-2. **Read docs**: Chi tiết documentation cho mỗi function
-3. **Debug guide**: [Troubleshooting](./docs/troubleshooting.md) cho common issues
-4. **Test individual**: Có thể test từng function riêng lẻ
+- [Troubleshooting Guide](./docs/troubleshooting.md)
+- [Kubernetes Functions](./docs/k8s-functions.md)
+- [Docker Functions](./docs/docker-functions.md)
+- [Telegram Notifications](./docs/telegramNotify.md)
 
-**Note về `.env` issue đã fix**:
-- Function hiện sử dụng `go-template index` để handle keys có dấu chấm
-- ConfigMap parsing dùng YAML + awk thay vì complex regex
-- Debug output không interfere với key extraction
+## 🤝 Contributing
+
+1. Make changes in your branch
+2. Test with `@Library('jenkins-shared@your-branch') _`
+3. Create PR to `main`
+4. All projects automatically get updates
+
+## 📜 License
+
+Internal use only - Metaway Holdings
