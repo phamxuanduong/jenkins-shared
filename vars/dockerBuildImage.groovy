@@ -13,7 +13,7 @@
  */
 def call(Map args = [:]) {
   // Get project vars if not provided
-  def vars = args.vars ?: getProjectVars()
+  def vars = args.vars ?: sharedUtils.getProjectVarsOptimized()
 
   String image = args.image ?: "${vars.REGISTRY}/${vars.APP_NAME}"
   String tag = args.tag ?: vars.COMMIT_HASH
