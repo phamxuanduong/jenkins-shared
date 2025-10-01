@@ -228,7 +228,7 @@ def getProjectVarsOptimized() {
 }
 
 /**
- * Get domain from ingress with same name as deployment
+ * Get domains from ingress with same name as deployment
  */
 def getIngressDomain(deploymentName, namespace) {
   if (!deploymentName || !namespace) {
@@ -239,14 +239,16 @@ def getIngressDomain(deploymentName, namespace) {
     def result = sh(
       script: """
         kubectl get ingress ${deploymentName} -n ${namespace} \
-          -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo ''
+          -o jsonpath='{.spec.rules[*].host}' 2>/dev/null || echo ''
       """,
       returnStdout: true
     ).trim()
 
     if (result) {
-      echo "[INFO] telegramNotify: Found domain '${result}' from ingress '${deploymentName}'"
-      return result
+      // Multiple domains separated by space, join with comma
+      def domains = result.split(/\s+/).join(', ')
+      echo "[INFO] telegramNotify: Found domain(s) '${domains}' from ingress '${deploymentName}'"
+      return domains
     }
   } catch (Exception e) {
     echo "[DEBUG] telegramNotify: No ingress found for '${deploymentName}' in namespace '${namespace}'"

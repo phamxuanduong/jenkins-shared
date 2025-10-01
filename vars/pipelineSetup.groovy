@@ -122,7 +122,7 @@ def getUserFromGit() {
 }
 
 /**
- * Get domain from ingress with same name as deployment
+ * Get domains from ingress with same name as deployment
  */
 def getIngressDomain(deploymentName, namespace) {
   if (!deploymentName || !namespace) {
@@ -133,13 +133,14 @@ def getIngressDomain(deploymentName, namespace) {
     def result = sh(
       script: """
         kubectl get ingress ${deploymentName} -n ${namespace} \
-          -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo ''
+          -o jsonpath='{.spec.rules[*].host}' 2>/dev/null || echo ''
       """,
       returnStdout: true
     ).trim()
 
     if (result) {
-      return result
+      // Multiple domains separated by space, join with comma
+      return result.split(/\s+/).join(', ')
     }
   } catch (Exception e) {
     // Silently ignore - ingress may not exist
