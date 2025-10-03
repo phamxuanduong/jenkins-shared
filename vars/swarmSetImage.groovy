@@ -13,7 +13,7 @@
  */
 def call(Map args = [:]) {
   // Get project vars if not provided
-  def vars = args.vars ?: getProjectVars()
+  def vars = args.vars ?: sharedUtils.getProjectVarsOptimized()
 
   // Check deployment permissions (only if permission check is enabled)
   if (vars.CAN_DEPLOY == false) {
