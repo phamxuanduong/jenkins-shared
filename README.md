@@ -135,10 +135,17 @@ dockerPushImage(
 
 ### `k8sGetConfigMap()` - Fetch ConfigMaps
 
-Lấy config từ 2 ConfigMaps: `general` (shared) và branch-specific.
+Lấy config từ Kubernetes ConfigMaps với logic tự động phát hiện cấu trúc nhánh.
+
+**Logic tự động:**
+- **Case 1**: Nhánh không có suffix (vd: `beta`, `prod`)
+  - → Lấy TẤT CẢ files (.env, Dockerfile, etc.) từ ConfigMap base (`beta`, `prod`)
+- **Case 2**: Nhánh có suffix (vd: `beta/api`, `beta/worker`)
+  - → Lấy `.env` từ ConfigMap base (`beta`, `prod`)
+  - → Lấy `Dockerfile` từ ConfigMap có suffix (`beta-api`, `beta-worker`)
 
 ```groovy
-// Auto-fetch từ cả 2 ConfigMaps
+// Auto-fetch (khuyến nghị)
 k8sGetConfigMap()
 
 // Custom ConfigMap names
@@ -146,42 +153,66 @@ k8sGetConfigMap(
   generalConfigmap: 'shared',
   configmap: 'prod-config'
 )
-
-// Chỉ lấy specific keys
-k8sGetConfigMap(
-  items: [
-    'Dockerfile': 'Dockerfile',
-    '.env': '.env'
-  ]
-)
 ```
 
-**ConfigMap Structure:**
+**Ví dụ cấu trúc ConfigMap:**
+
+**Case 1: Nhánh `beta` (không có suffix)**
 ```yaml
-# general (shared across branches)
+# ConfigMap 'beta' chứa TẤT CẢ files
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: general
+  name: beta
   namespace: my-app
 data:
-  docker-compose.yml: |
-    version: '3'
-    services: ...
+  .env: |
+    NODE_ENV=beta
+    API_URL=https://beta-api.example.com
+  Dockerfile: |
+    FROM node:18
+    COPY . /app
+    CMD ["npm", "start"]
+```
 
----
-# prod (branch-specific)
+**Case 2: Nhánh `beta/api` và `beta/worker` (có suffix)**
+```yaml
+# ConfigMap 'beta' chứa .env (shared cho beta/api, beta/worker)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prod
+  name: beta
+  namespace: my-app
+data:
+  .env: |
+    NODE_ENV=beta
+    API_URL=https://beta-api.example.com
+
+---
+# ConfigMap 'beta-api' chứa Dockerfile cho beta/api
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta-api
   namespace: my-app
 data:
   Dockerfile: |
     FROM node:18
     COPY . /app
-  .env: |
-    NODE_ENV=production
+    CMD ["npm", "run", "start:api"]
+
+---
+# ConfigMap 'beta-worker' chứa Dockerfile cho beta/worker
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta-worker
+  namespace: my-app
+data:
+  Dockerfile: |
+    FROM node:18
+    COPY . /app
+    CMD ["npm", "run", "start:worker"]
 ```
 
 ### `k8sSetImage()` - Deploy to Kubernetes
