@@ -133,33 +133,38 @@ dockerPushImage(
 )
 ```
 
-### `k8sGetConfigMap()` - Fetch ConfigMaps
+### `k8sGetConfigMap()` - Fetch ConfigMaps & Secrets
 
-Lấy config từ Kubernetes ConfigMaps với logic tự động phát hiện cấu trúc nhánh.
+Lấy config từ Kubernetes ConfigMaps và Secrets với logic ưu tiên.
 
-**Logic tự động:**
-- **Case 1**: Nhánh không có suffix (vd: `beta`, `prod`)
-  - → Lấy TẤT CẢ files (.env, Dockerfile, etc.) từ ConfigMap base (`beta`, `prod`)
-- **Case 2**: Nhánh có suffix (vd: `beta/api`, `beta/worker`)
-  - → Lấy `.env` từ ConfigMap base (`beta`, `prod`)
-  - → Lấy `Dockerfile` từ ConfigMap có suffix (`beta-api`, `beta-worker`)
+**Logic mới (backward compatible):**
+- **Step 1**: Lấy TẤT CẢ files từ ConfigMaps (bao gồm .env nếu có - cho dự án cũ)
+- **Step 2**: Lấy .env từ Secret (nếu có) → **OVERRIDE** .env từ ConfigMap
+
+**Ưu tiên:**
+- ✅ Nếu Secret có `.env` → dùng `.env` từ Secret (ưu tiên cao - dự án mới)
+- ✅ Nếu Secret không có `.env` → dùng `.env` từ ConfigMap (fallback - dự án cũ)
 
 ```groovy
 // Auto-fetch (khuyến nghị)
 k8sGetConfigMap()
 
-// Custom ConfigMap names
+// Custom Secret name
 k8sGetConfigMap(
-  generalConfigmap: 'shared',
-  configmap: 'prod-config'
+  secret: 'my-secret'
+)
+
+// Skip Secret (chỉ dùng ConfigMap - cho dự án cũ)
+k8sGetConfigMap(
+  skipSecret: true
 )
 ```
 
-**Ví dụ cấu trúc ConfigMap:**
+**Ví dụ cấu trúc:**
 
-**Case 1: Nhánh `beta` (không có suffix)**
+**Dự án cũ - Chỉ dùng ConfigMap:**
 ```yaml
-# ConfigMap 'beta' chứa TẤT CẢ files
+# ConfigMap 'beta' chứa TẤT CẢ (bao gồm .env)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -168,52 +173,52 @@ metadata:
 data:
   .env: |
     NODE_ENV=beta
-    API_URL=https://beta-api.example.com
+    DATABASE_URL=postgres://beta-db
   Dockerfile: |
     FROM node:18
     COPY . /app
     CMD ["npm", "start"]
 ```
 
-**Case 2: Nhánh `beta/api` và `beta/worker` (có suffix)**
+**Dự án mới - ConfigMap + Secret:**
 ```yaml
-# ConfigMap 'beta' chứa .env (shared cho beta/api, beta/worker)
+# ConfigMap 'beta' chứa Dockerfile, nginx.conf, etc. (KHÔNG có .env)
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: beta
   namespace: my-app
 data:
-  .env: |
-    NODE_ENV=beta
-    API_URL=https://beta-api.example.com
-
----
-# ConfigMap 'beta-api' chứa Dockerfile cho beta/api
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: beta-api
-  namespace: my-app
-data:
   Dockerfile: |
     FROM node:18
     COPY . /app
-    CMD ["npm", "run", "start:api"]
+    CMD ["npm", "start"]
+  nginx.conf: |
+    server {
+      listen 80;
+    }
 
 ---
-# ConfigMap 'beta-worker' chứa Dockerfile cho beta/worker
+# Secret 'beta' chứa .env (OVERRIDE ConfigMap nếu ConfigMap có .env)
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
-  name: beta-worker
+  name: beta
   namespace: my-app
+type: Opaque
 data:
-  Dockerfile: |
-    FROM node:18
-    COPY . /app
-    CMD ["npm", "run", "start:worker"]
+  .env: Tk9ERV9FTlY9YmV0YQpEQVRBQkFTRV9VUkw9cG9zdGdyZXM6Ly9iZXRhLWRiCkpXVF9TRUNSRVQ9c3VwZXItc2VjcmV0LWtleQ==
+  # Base64 encoded:
+  # NODE_ENV=beta
+  # DATABASE_URL=postgres://beta-db
+  # JWT_SECRET=super-secret-key
 ```
+
+**Migration path từ cũ sang mới:**
+1. ✅ Giữ nguyên ConfigMap có .env (dự án vẫn chạy bình thường)
+2. ✅ Tạo Secret chứa .env mới
+3. ✅ Pipeline tự động ưu tiên Secret (override .env từ ConfigMap)
+4. ✅ Sau đó có thể xóa .env khỏi ConfigMap (optional)
 
 ### `k8sSetImage()` - Deploy to Kubernetes
 

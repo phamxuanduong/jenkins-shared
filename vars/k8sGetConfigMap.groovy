@@ -1,18 +1,31 @@
 /**
- * k8sGetConfig - Retrieve configuration from Kubernetes ConfigMaps
+ * k8sGetConfig - Retrieve configuration from Kubernetes ConfigMaps and Secrets
  *
- * Logic:
- * - Case 1: Branch without suffix (e.g., "beta", "prod")
- *   → Fetch ALL files (.env, Dockerfile, etc.) from base ConfigMap (beta, prod)
- * - Case 2: Branch with suffix (e.g., "beta/api", "beta/worker")
- *   → Fetch .env from base ConfigMap (beta, prod)
- *   → Fetch Dockerfile from suffixed ConfigMap (beta-api, beta-worker)
+ * Logic mới (backward compatible):
+ * - Step 1: Lấy TẤT CẢ files từ ConfigMaps (bao gồm .env nếu có - cho dự án cũ)
+ * - Step 2: Lấy .env từ Secret (nếu có) → OVERRIDE .env từ ConfigMap
+ *
+ * Ưu tiên:
+ * - Nếu Secret có .env → dùng .env từ Secret (ưu tiên cao)
+ * - Nếu Secret không có .env → dùng .env từ ConfigMap (fallback cho dự án cũ)
+ *
+ * ConfigMap structure (giữ nguyên như cũ):
+ * - Case 1: Branch không có suffix (e.g., "beta", "prod")
+ *   → Lấy ALL files từ ConfigMap "beta"/"prod"
+ * - Case 2: Branch có suffix (e.g., "beta/api", "beta/worker")
+ *   → Lấy files từ ConfigMap "beta"/"prod" (shared files)
+ *   → Lấy files từ ConfigMap "beta-api"/"beta-worker" (specific files)
+ *
+ * Secret structure (dự án mới):
+ * - Secret name tương ứng với base environment (beta, prod, staging)
+ * - Data key: ".env" chứa toàn bộ nội dung file .env
  *
  * @param args Map of optional parameters:
  *   - namespace: Kubernetes namespace (default: from getProjectVars)
  *   - configmap: Branch-specific ConfigMap name (default: sanitized branch name)
  *   - generalConfigmap: General ConfigMap name (default: 'general')
- *   - items: Map of key-value pairs to extract (default: auto-detect based on branch)
+ *   - secret: Secret name for .env (default: base environment name - beta/prod/staging)
+ *   - skipSecret: Skip fetching .env from Secret (default: false)
  *   - vars: Project variables (default: auto-call getProjectVars)
  *
  * @return void - Files are written to workspace
@@ -30,37 +43,38 @@ def call(Map args = [:]) {
   String baseEnv = branchParts.base
   String suffix = branchParts.suffix
 
+  // Secret name defaults to base environment (beta, prod, staging)
+  String secretName = args.secret ?: baseEnv
+  boolean skipSecret = args.skipSecret ?: false
+
   echo """
-[INFO] k8sGetConfig: Branch Analysis:
+[INFO] k8sGetConfig: Configuration Strategy:
   - Original Branch: '${vars.REPO_BRANCH}'
   - Base Environment: '${baseEnv}'
   - Suffix: '${suffix ?: 'none'}'
   - Sanitized Branch: '${branchCm}'
+  - Step 1: Fetch ALL files from ConfigMaps (including .env if exists)
+  - Step 2: Fetch .env from Secret '${secretName}' (OVERRIDE if exists)
 """
 
-  // Determine which ConfigMaps to use and what files to fetch
-  List<Map> configMapStrategy = determineConfigMapStrategy(baseEnv, suffix, branchCm, generalCm)
+  // Step 1: Fetch from ConfigMaps (all files including .env)
+  echo "[INFO] k8sGetConfig: Step 1 - Fetching ALL files from ConfigMaps"
+  List<String> configmaps = determineConfigMaps(baseEnv, suffix, branchCm, generalCm)
 
-  configMapStrategy.each { Map strategy ->
-    String cm = strategy.configmap
-    List<String> files = strategy.files
-
-    echo """
-[INFO] k8sGetConfig: Processing ConfigMap '${cm}':
-  - Namespace: '${ns}'
-  - Files to fetch: ${files ?: 'ALL'}
-"""
-
-    if (files == null || files.isEmpty()) {
-      // Fetch ALL keys from this ConfigMap
-      fetchAllKeysFromConfigMap(ns, cm)
-    } else {
-      // Fetch specific files only
-      files.each { String fileName ->
-        fetchConfigKey(ns, cm, fileName, fileName)
-      }
-    }
+  configmaps.each { String cm ->
+    echo "[INFO] k8sGetConfig: Processing ConfigMap '${cm}' (namespace: '${ns}')"
+    fetchAllKeysFromConfigMap(ns, cm)
   }
+
+  // Step 2: Fetch .env from Secret (will override .env from ConfigMap if exists)
+  if (!skipSecret) {
+    echo "[INFO] k8sGetConfig: Step 2 - Fetching .env from Secret '${secretName}' (will OVERRIDE if exists)"
+    fetchEnvFromSecret(ns, secretName, '.env')
+  } else {
+    echo "[INFO] k8sGetConfig: Step 2 - Skipped (skipSecret=true)"
+  }
+
+  echo "[SUCCESS] k8sGetConfig: Configuration fetch completed!"
 }
 
 /**
@@ -89,49 +103,34 @@ def parseBranchName(String branchName) {
 }
 
 /**
- * Determine ConfigMap fetching strategy based on branch structure
+ * Determine which ConfigMaps to fetch from (keep old logic for backward compatibility)
  */
-def determineConfigMapStrategy(String baseEnv, String suffix, String branchCm, String generalCm) {
-  List<Map> strategy = []
-
-  // Always fetch from general ConfigMap first (if it exists)
-  strategy.add([
-    configmap: generalCm,
-    files: null  // Fetch all files
-  ])
+def determineConfigMaps(String baseEnv, String suffix, String branchCm, String generalCm) {
+  List<String> configmaps = [generalCm]
 
   if (!suffix) {
     // Case 1: No suffix (e.g., "beta", "prod")
-    // → Fetch ALL files from base ConfigMap
-    echo "[INFO] k8sGetConfig: Case 1 - No suffix detected, fetching ALL files from '${baseEnv}'"
-    strategy.add([
-      configmap: baseEnv,
-      files: null  // Fetch all files including .env and Dockerfile
-    ])
+    // → Fetch from base ConfigMap only
+    echo "[INFO] k8sGetConfig: Case 1 - No suffix, using ConfigMap '${baseEnv}'"
+    configmaps.add(baseEnv)
   } else {
     // Case 2: Has suffix (e.g., "beta/api", "prod/worker")
-    // → Fetch .env from base ConfigMap (beta, prod)
-    // → Fetch Dockerfile from suffixed ConfigMap (beta-api, prod-worker)
+    // → Fetch from base ConfigMap (shared) AND suffixed ConfigMap (specific)
     echo "[INFO] k8sGetConfig: Case 2 - Suffix '${suffix}' detected"
-    echo "[INFO] k8sGetConfig: - Fetching .env from base ConfigMap '${baseEnv}'"
-    echo "[INFO] k8sGetConfig: - Fetching Dockerfile from suffixed ConfigMap '${branchCm}'"
-
-    strategy.add([
-      configmap: baseEnv,
-      files: ['.env']  // Fetch only .env from base
-    ])
-
-    strategy.add([
-      configmap: branchCm,
-      files: ['Dockerfile']  // Fetch only Dockerfile from suffixed
-    ])
+    echo "[INFO] k8sGetConfig: - Using base ConfigMap '${baseEnv}' for shared files"
+    echo "[INFO] k8sGetConfig: - Using suffixed ConfigMap '${branchCm}' for specific files"
+    configmaps.add(baseEnv)
+    configmaps.add(branchCm)
   }
 
-  return strategy
+  return configmaps.unique()
 }
 
 /**
  * Fetch all keys from a ConfigMap
+ *
+ * @param ns Namespace
+ * @param cm ConfigMap name
  */
 def fetchAllKeysFromConfigMap(String ns, String cm) {
   // Get only data keys using kubectl and awk to parse yaml output
@@ -147,7 +146,8 @@ def fetchAllKeysFromConfigMap(String ns, String cm) {
   if (keysList) {
     keysList.split('\n').each { String keyName ->
       if (keyName && keyName.trim()) {
-        fetchConfigKey(ns, cm, keyName.trim(), keyName.trim())
+        def trimmedKey = keyName.trim()
+        fetchConfigKey(ns, cm, trimmedKey, trimmedKey)
       }
     }
   } else {
@@ -155,6 +155,49 @@ def fetchAllKeysFromConfigMap(String ns, String cm) {
   }
 }
 
+/**
+ * Fetch .env file from Kubernetes Secret
+ *
+ * @param ns Namespace
+ * @param secretName Secret name (e.g., "beta", "prod")
+ * @param destPath Destination file path (default: ".env")
+ */
+def fetchEnvFromSecret(String ns, String secretName, String destPath = '.env') {
+  sh(
+    label: "k8sGetConfig: Secret/${secretName}/.env → ${destPath}",
+    script: """#!/bin/bash
+      set -Eeuo pipefail
+
+      echo "[INFO] k8sGetConfig: Fetching .env from Secret='${secretName}' (ns='${ns}')"
+
+      tmp=\$(mktemp)
+
+      # Check if secret exists and has .env key
+      if ! kubectl get secret '${secretName}' -n '${ns}' \\
+           -o go-template='{{index .data ".env"}}' 2>/dev/null | base64 -d > "\$tmp"; then
+        echo "[WARN] k8sGetConfig: Secret '${secretName}' not found or key '.env' missing, skipping..." >&2
+        rm -f "\$tmp"
+        exit 0
+      fi
+
+      # Check if the key actually has data
+      if [ ! -s "\$tmp" ]; then
+        echo "[WARN] k8sGetConfig: Key '.env' is empty in Secret '${secretName}', skipping..." >&2
+        rm -f "\$tmp"
+        exit 0
+      fi
+
+      bytes=\$(wc -c < "\$tmp" | tr -d ' ')
+      sha=\$(sha256sum "\$tmp" | awk '{print \$1}')
+      mv -f "\$tmp" '${destPath}'
+      echo "[SUCCESS] k8sGetConfig: Wrote '${destPath}' (\${bytes} bytes, sha256=\$sha) from Secret '${secretName}'"
+    """
+  )
+}
+
+/**
+ * Fetch a specific key from ConfigMap
+ */
 def fetchConfigKey(String ns, String cm, String key, String destPath) {
   if (!destPath) {
     echo "[WARN] k8sGetConfig: Empty destination path for key '${key}', skipping..."
@@ -194,4 +237,3 @@ def fetchConfigKey(String ns, String cm, String key, String destPath) {
     """
   )
 }
-
