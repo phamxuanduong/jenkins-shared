@@ -1,34 +1,33 @@
 /**
- * k8sGetConfig - Retrieve configuration from Kubernetes ConfigMaps and Secrets
+ * k8sGetConfigMap - Retrieve configuration from Kubernetes ConfigMaps
  *
- * Logic mới (backward compatible):
- * - Step 1: Lấy TẤT CẢ files từ ConfigMaps (bao gồm .env, Dockerfile, etc. - cho dự án cũ)
- * - Step 2: Lấy TẤT CẢ files từ Secret (nếu có) → OVERRIDE files từ ConfigMap
+ * Lấy config files từ ConfigMaps (Dockerfile, nginx.conf, v.v.)
+ * Để lấy sensitive files (.env, application.properties), dùng k8sGetSecret()
  *
- * Ưu tiên:
- * - Nếu Secret có files (.env, application.properties, etc.) → dùng files từ Secret (ưu tiên cao)
- * - Nếu Secret không có → dùng files từ ConfigMap (fallback cho dự án cũ)
- *
- * ConfigMap structure (giữ nguyên như cũ):
+ * ConfigMap structure:
  * - Case 1: Branch không có suffix (e.g., "beta", "prod")
- *   → Lấy ALL files từ ConfigMap "beta"/"prod"
+ *   → Lấy ALL files từ ConfigMap "general" + "beta"/"prod"
  * - Case 2: Branch có suffix (e.g., "beta/api", "beta/worker")
- *   → Lấy files từ ConfigMap "beta"/"prod" (shared files)
- *   → Lấy files từ ConfigMap "beta-api"/"beta-worker" (specific files)
- *
- * Secret structure (dự án mới):
- * - Secret name GIỐNG như ConfigMap name (beta, beta-api, beta-worker, prod, prod-worker, etc.)
- * - Data keys: ".env", "application.properties", "database.yml", etc.
+ *   → Lấy files từ ConfigMap "general" + "beta"/"prod" + "beta-api"/"beta-worker"
  *
  * @param args Map of optional parameters:
  *   - namespace: Kubernetes namespace (default: from getProjectVars)
  *   - configmap: Branch-specific ConfigMap name (default: sanitized branch name)
  *   - generalConfigmap: General ConfigMap name (default: 'general')
- *   - secret: Secret name (default: same as configmap - sanitized branch name)
- *   - skipSecret: Skip fetching from Secret (default: false)
  *   - vars: Project variables (default: auto-call getProjectVars)
  *
  * @return void - Files are written to workspace
+ *
+ * @example
+ *   // Auto-fetch
+ *   k8sGetConfigMap()
+ *
+ * @example
+ *   // Custom ConfigMap names
+ *   k8sGetConfigMap(
+ *     generalConfigmap: 'shared',
+ *     configmap: 'prod-custom'
+ *   )
  */
 def call(Map args = [:]) {
   // Get project vars if not provided - check for cached data first
@@ -43,35 +42,22 @@ def call(Map args = [:]) {
   String baseEnv = branchParts.base
   String suffix = branchParts.suffix
 
-  // Secret name defaults to same as ConfigMap (SANITIZED_BRANCH)
-  String secretName = args.secret ?: branchCm
-  boolean skipSecret = args.skipSecret ?: false
-
   echo """
 [INFO] k8sGetConfig: Configuration Strategy:
   - Original Branch: '${vars.REPO_BRANCH}'
   - Base Environment: '${baseEnv}'
   - Suffix: '${suffix ?: 'none'}'
   - Sanitized Branch: '${branchCm}'
-  - Step 1: Fetch ALL files from ConfigMaps
-  - Step 2: Fetch ALL files from Secret '${secretName}' (OVERRIDE if exists)
+  - Fetching from ConfigMaps: general, ${baseEnv}${suffix ? ', ' + branchCm : ''}
 """
 
-  // Step 1: Fetch from ConfigMaps (all files)
-  echo "[INFO] k8sGetConfig: Step 1 - Fetching ALL files from ConfigMaps"
+  // Fetch from ConfigMaps (all files)
+  echo "[INFO] k8sGetConfig: Fetching ALL files from ConfigMaps"
   List<String> configmaps = determineConfigMaps(baseEnv, suffix, branchCm, generalCm)
 
   configmaps.each { String cm ->
     echo "[INFO] k8sGetConfig: Processing ConfigMap '${cm}' (namespace: '${ns}')"
     fetchAllKeysFromConfigMap(ns, cm)
-  }
-
-  // Step 2: Fetch ALL files from Secret (will override files from ConfigMap if exists)
-  if (!skipSecret) {
-    echo "[INFO] k8sGetConfig: Step 2 - Fetching ALL files from Secret '${secretName}' (will OVERRIDE if exists)"
-    fetchAllKeysFromSecret(ns, secretName)
-  } else {
-    echo "[INFO] k8sGetConfig: Step 2 - Skipped (skipSecret=true)"
   }
 
   echo "[SUCCESS] k8sGetConfig: Configuration fetch completed!"
@@ -153,83 +139,6 @@ def fetchAllKeysFromConfigMap(String ns, String cm) {
   } else {
     echo "[WARN] k8sGetConfig: ConfigMap '${cm}' not found or empty, skipping..."
   }
-}
-
-/**
- * Fetch all keys from a Kubernetes Secret
- *
- * @param ns Namespace
- * @param secretName Secret name (e.g., "beta", "beta-api", "prod-worker")
- */
-def fetchAllKeysFromSecret(String ns, String secretName) {
-  // Get all data keys from Secret using kubectl and awk
-  def keysList = sh(
-    script: """
-    if kubectl get secret '${secretName}' -n '${ns}' >/dev/null 2>&1; then
-      kubectl get secret '${secretName}' -n '${ns}' -o yaml | awk '/^data:/ {flag=1; next} /^[a-zA-Z]/ && flag {flag=0} flag && /^  [^ ]/ {gsub(/^  /, ""); gsub(/:.*/, ""); print}' 2>/dev/null || true
-    fi
-    """,
-    returnStdout: true
-  ).trim()
-
-  if (keysList) {
-    keysList.split('\n').each { String keyName ->
-      if (keyName && keyName.trim()) {
-        def trimmedKey = keyName.trim()
-        fetchSecretKey(ns, secretName, trimmedKey, trimmedKey)
-      }
-    }
-  } else {
-    echo "[WARN] k8sGetConfig: Secret '${secretName}' not found or empty, skipping..."
-  }
-}
-
-/**
- * Fetch a specific key from Secret (with base64 decode)
- *
- * @param ns Namespace
- * @param secretName Secret name
- * @param key Key name in Secret
- * @param destPath Destination file path
- */
-def fetchSecretKey(String ns, String secretName, String key, String destPath) {
-  if (!destPath) {
-    echo "[WARN] k8sGetConfig: Empty destination path for key '${key}', skipping..."
-    return
-  }
-
-  sh(
-    label: "k8sGetConfig: Secret/${secretName}/${key} → ${destPath}",
-    script: """#!/bin/bash
-      set -Eeuo pipefail
-
-      echo "[INFO] k8sGetConfig: Fetching key='${key}' from Secret='${secretName}' (ns='${ns}')"
-      dir=\$(dirname '${destPath}')
-      [ "\$dir" = "." ] || mkdir -p "\$dir"
-
-      tmp=\$(mktemp)
-
-      # Check if key exists in secret first - use go-template for keys with special chars
-      if ! kubectl get secret '${secretName}' -n '${ns}' \\
-           -o go-template='{{index .data "'${key}'"}}' 2>/dev/null | base64 -d > "\$tmp"; then
-        echo "[WARN] k8sGetConfig: Secret '${secretName}' not found or key '${key}' missing, skipping..." >&2
-        rm -f "\$tmp"
-        exit 0
-      fi
-
-      # Check if the key actually has data
-      if [ ! -s "\$tmp" ]; then
-        echo "[WARN] k8sGetConfig: Key '${key}' is empty in Secret '${secretName}', skipping..." >&2
-        rm -f "\$tmp"
-        exit 0
-      fi
-
-      bytes=\$(wc -c < "\$tmp" | tr -d ' ')
-      sha=\$(sha256sum "\$tmp" | awk '{print \$1}')
-      mv -f "\$tmp" '${destPath}'
-      echo "[SUCCESS] k8sGetConfig: Wrote '${destPath}' (\${bytes} bytes, sha256=\$sha) from Secret '${secretName}'"
-    """
-  )
 }
 
 /**
