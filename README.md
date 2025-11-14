@@ -135,54 +135,154 @@ dockerPushImage(
 
 ### `k8sGetConfigMap()` - Fetch ConfigMaps
 
-Lấy config từ 2 ConfigMaps: `general` (shared) và branch-specific.
+Lấy config files từ ConfigMaps (Dockerfile, nginx.conf, v.v.)
 
 ```groovy
-// Auto-fetch từ cả 2 ConfigMaps
+// Auto-fetch
 k8sGetConfigMap()
 
 // Custom ConfigMap names
 k8sGetConfigMap(
   generalConfigmap: 'shared',
-  configmap: 'prod-config'
-)
-
-// Chỉ lấy specific keys
-k8sGetConfigMap(
-  items: [
-    'Dockerfile': 'Dockerfile',
-    '.env': '.env'
-  ]
+  configmap: 'prod-custom'
 )
 ```
 
-**ConfigMap Structure:**
-```yaml
-# general (shared across branches)
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: general
-  namespace: my-app
-data:
-  docker-compose.yml: |
-    version: '3'
-    services: ...
+**ConfigMap structure:**
+- Branch `beta` → Lấy từ `general` + `beta`
+- Branch `beta/api` → Lấy từ `general` + `beta` + `beta-api`
+- Branch `beta/worker` → Lấy từ `general` + `beta` + `beta-worker`
 
 ---
-# prod (branch-specific)
+
+### `k8sGetSecret()` - Fetch Secrets
+
+Lấy sensitive files từ Secrets (.env, application.properties, v.v.)
+
+**Secret naming (CỐ ĐỊNH theo base environment):**
+- Branch `beta` → Secret `beta`
+- Branch `beta/api` → Secret `beta` (KHÔNG phải `beta-api`)
+- Branch `beta/worker` → Secret `beta` (KHÔNG phải `beta-worker`)
+- Branch `prod` → Secret `prod`
+- Branch `prod/api` → Secret `prod` (KHÔNG phải `prod-api`)
+
+```groovy
+// Auto-fetch (khuyến nghị)
+k8sGetSecret()
+
+// Custom Secret name
+k8sGetSecret(
+  secret: 'my-secret'
+)
+```
+
+**Secret sẽ OVERRIDE files từ ConfigMap nếu trùng tên**
+
+---
+
+**Ví dụ cấu trúc:**
+
+**Dự án cũ - Chỉ dùng ConfigMap:**
+```yaml
+# ConfigMap 'beta' chứa TẤT CẢ files (bao gồm .env)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prod
+  name: beta
+  namespace: my-app
+data:
+  .env: |
+    NODE_ENV=beta
+    DATABASE_URL=postgres://beta-db
+  Dockerfile: |
+    FROM node:18
+    CMD ["npm", "start"]
+```
+
+**Dự án mới - ConfigMap + Secret:**
+```yaml
+# ConfigMap 'beta' chứa Dockerfile, nginx.conf (files không nhạy cảm)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta
   namespace: my-app
 data:
   Dockerfile: |
     FROM node:18
-    COPY . /app
-  .env: |
-    NODE_ENV=production
+    CMD ["npm", "start"]
+  nginx.conf: |
+    server {
+      listen 80;
+    }
+
+---
+# Secret 'beta' (theo base environment) chứa sensitive files
+apiVersion: v1
+kind: Secret
+metadata:
+  name: beta  # ← CỐ ĐỊNH theo base env (beta, prod, staging)
+  namespace: my-app
+type: Opaque
+data:
+  .env: Tk9ERV9FTlY9YmV0YQpEQVRBQkFTRV9VUkw9cG9zdGdyZXM6Ly9iZXRhLWRi
+  application.properties: c2VydmVyLnBvcnQ9ODA4MA==
+  # Base64 encoded:
+  # .env: NODE_ENV=beta\nDATABASE_URL=postgres://beta-db
+  # application.properties: server.port=8080
 ```
+
+**Ví dụ với branch có suffix:**
+```yaml
+# Branch: beta/api
+# Branch: beta/worker
+
+# ConfigMap 'beta' (shared)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta
+data:
+  nginx.conf: |
+    server { listen 80; }
+
+---
+# ConfigMap 'beta-api' (specific cho api)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta-api
+data:
+  Dockerfile: |
+    FROM node:18
+    CMD ["npm", "run", "start:api"]
+
+---
+# ConfigMap 'beta-worker' (specific cho worker)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta-worker
+data:
+  Dockerfile: |
+    FROM node:18
+    CMD ["npm", "run", "start:worker"]
+
+---
+# Secret 'beta' (SHARED cho cả beta/api và beta/worker)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: beta  # ← CHỈ CÓ 'beta', KHÔNG CÓ 'beta-api' hay 'beta-worker'
+data:
+  .env: <base64>  # Dùng chung cho beta/api và beta/worker
+```
+
+**Migration path từ cũ sang mới:**
+1. ✅ Giữ nguyên ConfigMap (dự án vẫn chạy bình thường)
+2. ✅ Tạo Secret theo base environment (beta, prod, staging)
+3. ✅ Gọi `k8sGetSecret()` sau `k8sGetConfigMap()` (hoặc dùng `ci()`)
+4. ✅ Optional: Xóa sensitive files khỏi ConfigMap
 
 ### `k8sSetImage()` - Deploy to Kubernetes
 

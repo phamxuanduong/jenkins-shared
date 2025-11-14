@@ -9,6 +9,7 @@
  * @param config Map of optional parameters:
  *   - agent: Jenkins agent label (default: auto-detect from branch)
  *   - skipConfigMap: Skip k8sGetConfigMap (default: false)
+ *   - skipSecret: Skip k8sGetSecret (default: false)
  *   - skipBuild: Skip Docker build (default: false)
  *   - skipPush: Skip Docker push (default: false)
  *   - skipDeploy: Skip k8sSetImage (default: false)
@@ -55,6 +56,17 @@ def call(Map config = [:]) {
         steps {
           script {
             k8sGetConfigMap()
+          }
+        }
+      }
+
+      stage('Get Secret') {
+        when {
+          expression { config.skipSecret != true }
+        }
+        steps {
+          script {
+            k8sGetSecret()
           }
         }
       }
