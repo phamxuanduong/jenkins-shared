@@ -138,12 +138,16 @@ dockerPushImage(
 Lấy config từ Kubernetes ConfigMaps và Secrets với logic ưu tiên.
 
 **Logic mới (backward compatible):**
-- **Step 1**: Lấy TẤT CẢ files từ ConfigMaps (bao gồm .env nếu có - cho dự án cũ)
-- **Step 2**: Lấy .env từ Secret (nếu có) → **OVERRIDE** .env từ ConfigMap
+- **Step 1**: Lấy TẤT CẢ files từ ConfigMaps (Dockerfile, .env, nginx.conf, etc.)
+- **Step 2**: Lấy TẤT CẢ files từ Secret (nếu có) → **OVERRIDE** files từ ConfigMap
 
 **Ưu tiên:**
-- ✅ Nếu Secret có `.env` → dùng `.env` từ Secret (ưu tiên cao - dự án mới)
-- ✅ Nếu Secret không có `.env` → dùng `.env` từ ConfigMap (fallback - dự án cũ)
+- ✅ Secret có ưu tiên cao hơn → files từ Secret sẽ override files từ ConfigMap
+- ✅ Fallback: Nếu Secret không có → dùng files từ ConfigMap (dự án cũ)
+
+**Naming:**
+- Secret name **GIỐNG** ConfigMap name (beta, beta-api, prod-worker, etc.)
+- Secret data keys: `.env`, `application.properties`, `database.yml`, etc.
 
 ```groovy
 // Auto-fetch (khuyến nghị)
@@ -164,7 +168,7 @@ k8sGetConfigMap(
 
 **Dự án cũ - Chỉ dùng ConfigMap:**
 ```yaml
-# ConfigMap 'beta' chứa TẤT CẢ (bao gồm .env)
+# ConfigMap 'beta' chứa TẤT CẢ files
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -178,11 +182,13 @@ data:
     FROM node:18
     COPY . /app
     CMD ["npm", "start"]
+  application.properties: |
+    server.port=8080
 ```
 
 **Dự án mới - ConfigMap + Secret:**
 ```yaml
-# ConfigMap 'beta' chứa Dockerfile, nginx.conf, etc. (KHÔNG có .env)
+# ConfigMap 'beta' chứa Dockerfile, nginx.conf (files không nhạy cảm)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -199,26 +205,51 @@ data:
     }
 
 ---
-# Secret 'beta' chứa .env (OVERRIDE ConfigMap nếu ConfigMap có .env)
+# Secret 'beta' (TÊN GIỐNG ConfigMap) chứa sensitive files
 apiVersion: v1
 kind: Secret
 metadata:
-  name: beta
+  name: beta  # ← TÊN GIỐNG ConfigMap
   namespace: my-app
 type: Opaque
 data:
   .env: Tk9ERV9FTlY9YmV0YQpEQVRBQkFTRV9VUkw9cG9zdGdyZXM6Ly9iZXRhLWRiCkpXVF9TRUNSRVQ9c3VwZXItc2VjcmV0LWtleQ==
+  application.properties: c2VydmVyLnBvcnQ9ODA4MApkYi51c2VybmFtZT1hZG1pbgpkYi5wYXNzd29yZD1zZWNyZXQ=
   # Base64 encoded:
-  # NODE_ENV=beta
-  # DATABASE_URL=postgres://beta-db
-  # JWT_SECRET=super-secret-key
+  # .env: NODE_ENV=beta, DATABASE_URL=..., JWT_SECRET=...
+  # application.properties: server.port=8080, db.username=admin, db.password=secret
+```
+
+**Ví dụ với branch suffix:**
+```yaml
+# Branch: beta/api → ConfigMap 'beta-api', Secret 'beta-api'
+# Branch: beta/worker → ConfigMap 'beta-worker', Secret 'beta-worker'
+
+# ConfigMap 'beta-api'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta-api
+data:
+  Dockerfile: |
+    FROM node:18
+    CMD ["npm", "run", "start:api"]
+
+---
+# Secret 'beta-api' (TÊN GIỐNG ConfigMap)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: beta-api
+data:
+  .env: <base64-encoded-env-for-api>
 ```
 
 **Migration path từ cũ sang mới:**
-1. ✅ Giữ nguyên ConfigMap có .env (dự án vẫn chạy bình thường)
-2. ✅ Tạo Secret chứa .env mới
-3. ✅ Pipeline tự động ưu tiên Secret (override .env từ ConfigMap)
-4. ✅ Sau đó có thể xóa .env khỏi ConfigMap (optional)
+1. ✅ Giữ nguyên ConfigMap (dự án vẫn chạy bình thường)
+2. ✅ Tạo Secret cùng tên với ConfigMap
+3. ✅ Pipeline tự động ưu tiên Secret (override ConfigMap)
+4. ✅ Optional: Xóa sensitive files khỏi ConfigMap
 
 ### `k8sSetImage()` - Deploy to Kubernetes
 
