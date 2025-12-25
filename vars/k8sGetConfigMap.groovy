@@ -10,6 +10,10 @@
  * - Case 2: Branch có suffix (e.g., "beta/api", "beta/worker")
  *   → Lấy files từ ConfigMap "general" + "beta"/"prod" + "beta-api"/"beta-worker"
  *
+ * Naming strategy (with repo-branch support):
+ * - Priority 1: {REPO_NAME}-{configmap} (e.g., "jenkins-shared-beta")
+ * - Priority 2: {configmap} (e.g., "beta") - fallback to old naming
+ *
  * @param args Map of optional parameters:
  *   - namespace: Kubernetes namespace (default: from getProjectVars)
  *   - configmap: Branch-specific ConfigMap name (default: sanitized branch name)
@@ -36,6 +40,7 @@ def call(Map args = [:]) {
   String ns = args.namespace ?: vars.NAMESPACE
   String branchCm = args.configmap ?: vars.SANITIZED_BRANCH
   String generalCm = args.generalConfigmap ?: 'general'
+  String repoName = vars.REPO_NAME
 
   // Parse branch to detect base environment and suffix
   def branchParts = parseBranchName(vars.REPO_BRANCH ?: env.BRANCH_NAME ?: '')
@@ -44,16 +49,16 @@ def call(Map args = [:]) {
 
   echo """
 [INFO] k8sGetConfig: Configuration Strategy:
+  - Repository: '${repoName}'
   - Original Branch: '${vars.REPO_BRANCH}'
   - Base Environment: '${baseEnv}'
   - Suffix: '${suffix ?: 'none'}'
   - Sanitized Branch: '${branchCm}'
-  - Fetching from ConfigMaps: general, ${baseEnv}${suffix ? ', ' + branchCm : ''}
 """
 
   // Fetch from ConfigMaps (all files)
   echo "[INFO] k8sGetConfig: Fetching ALL files from ConfigMaps"
-  List<String> configmaps = determineConfigMaps(baseEnv, suffix, branchCm, generalCm)
+  List<String> configmaps = determineConfigMaps(ns, baseEnv, suffix, branchCm, generalCm, repoName)
 
   configmaps.each { String cm ->
     echo "[INFO] k8sGetConfig: Processing ConfigMap '${cm}' (namespace: '${ns}')"
@@ -89,27 +94,61 @@ def parseBranchName(String branchName) {
 }
 
 /**
- * Determine which ConfigMaps to fetch from (keep old logic for backward compatibility)
+ * Determine which ConfigMaps to fetch from (with repo-branch support)
+ * Priority: Try {REPO_NAME}-{configmap} first, fallback to {configmap}
  */
-def determineConfigMaps(String baseEnv, String suffix, String branchCm, String generalCm) {
-  List<String> configmaps = [generalCm]
+def determineConfigMaps(String ns, String baseEnv, String suffix, String branchCm, String generalCm, String repoName) {
+  List<String> configmaps = []
+
+  // Add general ConfigMap (with repo-branch support)
+  String generalResolved = resolveConfigMapName(ns, "${repoName}-${generalCm}", generalCm)
+  configmaps.add(generalResolved)
 
   if (!suffix) {
     // Case 1: No suffix (e.g., "beta", "prod")
     // → Fetch from base ConfigMap only
-    echo "[INFO] k8sGetConfig: Case 1 - No suffix, using ConfigMap '${baseEnv}'"
-    configmaps.add(baseEnv)
+    echo "[INFO] k8sGetConfig: Case 1 - No suffix"
+    String baseResolved = resolveConfigMapName(ns, "${repoName}-${baseEnv}", baseEnv)
+    echo "[INFO] k8sGetConfig: - Using ConfigMap '${baseResolved}' for base environment"
+    configmaps.add(baseResolved)
   } else {
     // Case 2: Has suffix (e.g., "beta/api", "prod/worker")
     // → Fetch from base ConfigMap (shared) AND suffixed ConfigMap (specific)
     echo "[INFO] k8sGetConfig: Case 2 - Suffix '${suffix}' detected"
-    echo "[INFO] k8sGetConfig: - Using base ConfigMap '${baseEnv}' for shared files"
-    echo "[INFO] k8sGetConfig: - Using suffixed ConfigMap '${branchCm}' for specific files"
-    configmaps.add(baseEnv)
-    configmaps.add(branchCm)
+    String baseResolved = resolveConfigMapName(ns, "${repoName}-${baseEnv}", baseEnv)
+    String branchResolved = resolveConfigMapName(ns, "${repoName}-${branchCm}", branchCm)
+    echo "[INFO] k8sGetConfig: - Using ConfigMap '${baseResolved}' for shared files"
+    echo "[INFO] k8sGetConfig: - Using ConfigMap '${branchResolved}' for specific files"
+    configmaps.add(baseResolved)
+    configmaps.add(branchResolved)
   }
 
   return configmaps.unique()
+}
+
+/**
+ * Resolve ConfigMap name with repo-branch support
+ * Try preferred name first (repo-branch), fallback to simple name
+ *
+ * @param ns Namespace
+ * @param preferredName Preferred ConfigMap name (e.g., "jenkins-shared-beta")
+ * @param fallbackName Fallback ConfigMap name (e.g., "beta")
+ * @return Resolved ConfigMap name
+ */
+def resolveConfigMapName(String ns, String preferredName, String fallbackName) {
+  // Check if preferred ConfigMap exists
+  def preferredExists = sh(
+    script: "kubectl get configmap '${preferredName}' -n '${ns}' >/dev/null 2>&1 && echo 'true' || echo 'false'",
+    returnStdout: true
+  ).trim()
+
+  if (preferredExists == 'true') {
+    echo "[INFO] k8sGetConfig: Using repo-branch ConfigMap: '${preferredName}'"
+    return preferredName
+  } else {
+    echo "[INFO] k8sGetConfig: Repo-branch ConfigMap '${preferredName}' not found, fallback to '${fallbackName}'"
+    return fallbackName
+  }
 }
 
 /**
