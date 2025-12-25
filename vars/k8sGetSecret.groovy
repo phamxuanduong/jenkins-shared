@@ -11,6 +11,10 @@
  * - Branch "prod" → Secret "prod"
  * - Branch "prod/api" → Secret "prod" (KHÔNG phải "prod-api")
  *
+ * Naming strategy (with repo-branch support):
+ * - Priority 1: {REPO_NAME}-{baseEnv} (e.g., "jenkins-shared-beta")
+ * - Priority 2: {baseEnv} (e.g., "beta") - fallback to old naming
+ *
  * Secret sẽ OVERRIDE files từ ConfigMap nếu trùng tên
  *
  * @param args Map of optional parameters:
@@ -35,16 +39,25 @@ def call(Map args = [:]) {
   def vars = args.vars ?: sharedUtils.getProjectVarsOptimized()
 
   String ns = args.namespace ?: vars.NAMESPACE
+  String repoName = vars.REPO_NAME
 
   // Parse branch to detect base environment
   def branchParts = parseBranchName(vars.REPO_BRANCH ?: env.BRANCH_NAME ?: '')
   String baseEnv = branchParts.base
 
-  // Secret name defaults to base environment (beta, prod, staging) - NO suffix
-  String secretName = args.secret ?: baseEnv
+  // Secret name: Try repo-branch first, fallback to base environment
+  String secretName
+  if (args.secret) {
+    // User explicitly provided secret name
+    secretName = args.secret
+  } else {
+    // Auto-resolve with repo-branch support
+    secretName = resolveSecretName(ns, "${repoName}-${baseEnv}", baseEnv)
+  }
 
   echo """
 [INFO] k8sGetSecret: Configuration Strategy:
+  - Repository: '${repoName}'
   - Original Branch: '${vars.REPO_BRANCH}'
   - Base Environment: '${baseEnv}'
   - Secret Name: '${secretName}' (base environment only, no suffix)
@@ -79,6 +92,31 @@ def parseBranchName(String branchName) {
     return [base: parts[0].toLowerCase(), suffix: parts[1].toLowerCase()]
   } else {
     return [base: branchName.toLowerCase(), suffix: null]
+  }
+}
+
+/**
+ * Resolve Secret name with repo-branch support
+ * Try preferred name first (repo-branch), fallback to simple name
+ *
+ * @param ns Namespace
+ * @param preferredName Preferred Secret name (e.g., "jenkins-shared-beta")
+ * @param fallbackName Fallback Secret name (e.g., "beta")
+ * @return Resolved Secret name
+ */
+def resolveSecretName(String ns, String preferredName, String fallbackName) {
+  // Check if preferred Secret exists
+  def preferredExists = sh(
+    script: "kubectl get secret '${preferredName}' -n '${ns}' >/dev/null 2>&1 && echo 'true' || echo 'false'",
+    returnStdout: true
+  ).trim()
+
+  if (preferredExists == 'true') {
+    echo "[INFO] k8sGetSecret: Using repo-branch Secret: '${preferredName}'"
+    return preferredName
+  } else {
+    echo "[INFO] k8sGetSecret: Repo-branch Secret '${preferredName}' not found, fallback to '${fallbackName}'"
+    return fallbackName
   }
 }
 
