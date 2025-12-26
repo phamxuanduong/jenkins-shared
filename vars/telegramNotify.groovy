@@ -120,16 +120,36 @@ def call(Map args = [:]) {
       returnStdout: true
     ).trim()
 
-    // Parse response using readJSON
-    def jsonResponse = readJSON text: response
-
-    if (jsonResponse.ok) {
+    // Check if response indicates success (avoid parsing full JSON to prevent Unicode issues)
+    if (response.contains('"ok":true')) {
       echo "[SUCCESS] telegramNotify: Telegram notification sent successfully"
-      echo "[INFO] telegramNotify: Message ID: ${jsonResponse.result.message_id}"
+
+      // Try to extract message_id if possible (optional, for logging)
+      try {
+        def messageIdMatch = (response =~ /"message_id":(\d+)/)
+        if (messageIdMatch) {
+          echo "[INFO] telegramNotify: Message ID: ${messageIdMatch[0][1]}"
+        }
+      } catch (Exception e) {
+        // Ignore message_id extraction errors
+      }
     } else {
-      echo "[ERROR] telegramNotify: Telegram notification failed: ${jsonResponse.description}"
+      // Try to parse error response
+      def errorMsg = "Unknown error"
+      try {
+        def jsonResponse = readJSON text: response
+        errorMsg = jsonResponse.description ?: errorMsg
+      } catch (Exception e) {
+        // If JSON parsing fails, try to extract description with regex
+        def descMatch = (response =~ /"description":"([^"]+)"/)
+        if (descMatch) {
+          errorMsg = descMatch[0][1]
+        }
+      }
+
+      echo "[ERROR] telegramNotify: Telegram notification failed: ${errorMsg}"
       if (args.failOnError != false) {
-        error "telegramNotify: Telegram notification failed: ${jsonResponse.description}"
+        error "telegramNotify: Telegram notification failed: ${errorMsg}"
       }
     }
 
