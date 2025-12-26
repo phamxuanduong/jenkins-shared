@@ -80,7 +80,7 @@ def call(Map args = [:]) {
       # Use printf to properly escape JSON for shell
       JSON_BODY=\$(printf '%s' '${jsonBody.replace("'", "'\\''")}')
 
-      # Retry logic for network failures (exit code 35: SSL connect error)
+      # Retry logic for network failures (exit codes 28: timeout, 35: SSL error)
       MAX_RETRIES=4
       RETRY_COUNT=0
       RETRY_DELAY=2
@@ -88,7 +88,7 @@ def call(Map args = [:]) {
       while [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; do
         RESPONSE=\$(curl -s -X POST \\
           --connect-timeout 10 \\
-          --max-time 30 \\
+          --max-time 15 \\
           -H "Content-Type: application/json" \\
           -d "\$JSON_BODY" \\
           "${apiUrl}" 2>&1)
@@ -101,14 +101,16 @@ def call(Map args = [:]) {
 
         RETRY_COUNT=\$((RETRY_COUNT + 1))
         if [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; then
-          echo "[WARN] Telegram API request failed (exit code \$EXIT_CODE), retrying in \${RETRY_DELAY}s... (attempt \$RETRY_COUNT/\$MAX_RETRIES)" >&2
+          # Output to stderr so it doesn't interfere with JSON parsing
+          echo "[WARN] Telegram API request failed (exit code \$EXIT_CODE), retrying in \${RETRY_DELAY}s (attempt \$RETRY_COUNT/\$MAX_RETRIES)" >&2
           sleep \$RETRY_DELAY
           RETRY_DELAY=\$((RETRY_DELAY * 2))
-        else
-          echo "[ERROR] Telegram API request failed after \$MAX_RETRIES attempts" >&2
-          exit \$EXIT_CODE
         fi
       done
+
+      # All retries failed - output error JSON and exit 0 (so Jenkins doesn't fail the sh() call)
+      echo "{\"ok\":false,\"description\":\"Network error after \$MAX_RETRIES retries (exit code \$EXIT_CODE)\"}"
+      exit 0
       """,
       returnStdout: true
     ).trim()
