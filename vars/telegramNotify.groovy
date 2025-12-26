@@ -71,7 +71,7 @@ def call(Map args = [:]) {
     // Convert to JSON
     def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
 
-    // Send HTTP request using secure credential handling
+    // Send HTTP request using secure credential handling with retry logic
     def apiUrl = "https://api.telegram.org/bot${botToken}/sendMessage"
 
     def response = sh(
@@ -79,10 +79,36 @@ def call(Map args = [:]) {
       set +x
       # Use printf to properly escape JSON for shell
       JSON_BODY=\$(printf '%s' '${jsonBody.replace("'", "'\\''")}')
-      curl -s -X POST \\
-        -H "Content-Type: application/json" \\
-        -d "\$JSON_BODY" \\
-        "${apiUrl}"
+
+      # Retry logic for network failures (exit code 35: SSL connect error)
+      MAX_RETRIES=4
+      RETRY_COUNT=0
+      RETRY_DELAY=2
+
+      while [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; do
+        RESPONSE=\$(curl -s -X POST \\
+          --connect-timeout 10 \\
+          --max-time 30 \\
+          -H "Content-Type: application/json" \\
+          -d "\$JSON_BODY" \\
+          "${apiUrl}" 2>&1)
+        EXIT_CODE=\$?
+
+        if [ \$EXIT_CODE -eq 0 ]; then
+          echo "\$RESPONSE"
+          exit 0
+        fi
+
+        RETRY_COUNT=\$((RETRY_COUNT + 1))
+        if [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; then
+          echo "[WARN] Telegram API request failed (exit code \$EXIT_CODE), retrying in \${RETRY_DELAY}s... (attempt \$RETRY_COUNT/\$MAX_RETRIES)" >&2
+          sleep \$RETRY_DELAY
+          RETRY_DELAY=\$((RETRY_DELAY * 2))
+        else
+          echo "[ERROR] Telegram API request failed after \$MAX_RETRIES attempts" >&2
+          exit \$EXIT_CODE
+        fi
+      done
       """,
       returnStdout: true
     ).trim()
