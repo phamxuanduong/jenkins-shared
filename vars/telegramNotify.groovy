@@ -71,80 +71,51 @@ def call(Map args = [:]) {
     // Convert to JSON
     def jsonBody = groovy.json.JsonOutput.toJson(requestBody)
 
-    // Send HTTP request using secure credential handling with retry logic
+    // Send HTTP request - simple and straightforward, no retry needed
     def apiUrl = "https://api.telegram.org/bot${botToken}/sendMessage"
 
     def response = sh(
       script: """
       set +x
-      set +e  # CRITICAL: Disable exit on error to allow retry logic
-
-      # Debug: Confirm we're running the retry logic version
-      echo "[DEBUG] telegramNotify: Running with retry logic (v3)" >&2
-
       # Use printf to properly escape JSON for shell
       JSON_BODY=\$(printf '%s' '${jsonBody.replace("'", "'\\''")}')
 
-      # Retry logic for network failures (exit codes 28: timeout, 35: SSL error)
-      MAX_RETRIES=4
-      RETRY_COUNT=0
-      RETRY_DELAY=2
+      # Send request and capture only HTTP status code
+      HTTP_CODE=\$(curl -s -w '%{http_code}' -o /tmp/telegram_response_\$\$.txt \\
+        -X POST \\
+        -H "Content-Type: application/json" \\
+        -d "\$JSON_BODY" \\
+        "${apiUrl}")
 
-      while [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; do
-        RESPONSE=\$(curl -s -X POST \\
-          --connect-timeout 10 \\
-          --max-time 15 \\
-          -H "Content-Type: application/json" \\
-          -d "\$JSON_BODY" \\
-          "${apiUrl}" 2>&1)
-        EXIT_CODE=\$?
-
-        if [ \$EXIT_CODE -eq 0 ]; then
-          echo "\$RESPONSE"
-          exit 0
-        fi
-
-        RETRY_COUNT=\$((RETRY_COUNT + 1))
-        if [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; then
-          # Output to stderr so it doesn't interfere with JSON parsing
-          echo "[WARN] Telegram API request failed (exit code \$EXIT_CODE), retrying in \${RETRY_DELAY}s (attempt \$RETRY_COUNT/\$MAX_RETRIES)" >&2
-          sleep \$RETRY_DELAY
-          RETRY_DELAY=\$((RETRY_DELAY * 2))
-        fi
-      done
-
-      # All retries failed - output error JSON and exit 0 (so Jenkins doesn't fail the sh() call)
-      echo "{\"ok\":false,\"description\":\"Network error after \$MAX_RETRIES retries (exit code \$EXIT_CODE)\"}"
-      exit 0
+      # Output format: HTTP_CODE|first_100_chars_of_response
+      echo "\${HTTP_CODE}|\$(head -c 100 /tmp/telegram_response_\$\$.txt)"
+      rm -f /tmp/telegram_response_\$\$.txt
       """,
       returnStdout: true
     ).trim()
 
-    // Check if response indicates success (avoid parsing full JSON to prevent Unicode issues)
-    if (response.contains('"ok":true')) {
-      echo "[SUCCESS] telegramNotify: Telegram notification sent successfully"
+    // Parse simple response format: "200|{\"ok\":true,..."
+    def parts = response.split('\\|', 2)
+    def httpCode = parts[0]
+    def responsePreview = parts.length > 1 ? parts[1] : ''
 
-      // Try to extract message_id if possible (optional, for logging)
-      try {
-        def messageIdMatch = (response =~ /"message_id":(\d+)/)
-        if (messageIdMatch) {
-          echo "[INFO] telegramNotify: Message ID: ${messageIdMatch[0][1]}"
-        }
-      } catch (Exception e) {
-        // Ignore message_id extraction errors
+    // Check success by HTTP code and "ok":true in response
+    if (httpCode == '200' && responsePreview.contains('"ok":true')) {
+      echo "[SUCCESS] telegramNotify: Telegram notification sent successfully (HTTP ${httpCode})"
+
+      // Try to extract message_id from preview
+      def messageIdMatch = (responsePreview =~ /"message_id":(\d+)/)
+      if (messageIdMatch) {
+        echo "[INFO] telegramNotify: Message ID: ${messageIdMatch[0][1]}"
       }
     } else {
-      // Try to parse error response
-      def errorMsg = "Unknown error"
-      try {
-        def jsonResponse = readJSON text: response
-        errorMsg = jsonResponse.description ?: errorMsg
-      } catch (Exception e) {
-        // If JSON parsing fails, try to extract description with regex
-        def descMatch = (response =~ /"description":"([^"]+)"/)
-        if (descMatch) {
-          errorMsg = descMatch[0][1]
-        }
+      // Extract error description from preview
+      def errorMsg = "HTTP ${httpCode}"
+      def descMatch = (responsePreview =~ /"description":"([^"]+)"/)
+      if (descMatch) {
+        errorMsg += " - ${descMatch[0][1]}"
+      } else if (responsePreview) {
+        errorMsg += " - ${responsePreview}"
       }
 
       echo "[ERROR] telegramNotify: Telegram notification failed: ${errorMsg}"
