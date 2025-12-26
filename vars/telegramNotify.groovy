@@ -77,6 +77,9 @@ def call(Map args = [:]) {
     def response = sh(
       script: """
       set +x
+      # Debug: Confirm we're running the retry logic version
+      echo "[DEBUG] telegramNotify: Running with retry logic (v2)" >&2
+
       # Use printf to properly escape JSON for shell
       JSON_BODY=\$(printf '%s' '${jsonBody.replace("'", "'\\''")}')
 
