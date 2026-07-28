@@ -151,7 +151,7 @@ def call(Map config = [:]) {
  */
 def autoDetectAgent() {
   def branchName = env.BRANCH_NAME ?: ''
-  def envAgent = ['beta', 'staging', 'prod'].find { env ->
+  def envAgent = ['beta', 'beta-old', 'staging', 'prod'].find { env ->
     branchName.equalsIgnoreCase(env) || branchName.toLowerCase().startsWith(env + '/')
   }
   return envAgent ?: ''
