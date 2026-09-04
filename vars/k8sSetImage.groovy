@@ -30,6 +30,8 @@ def call(Map args = [:]) {
   String tag = args.tag ?: vars.COMMIT_HASH
   String namespace = args.namespace ?: vars.NAMESPACE
   String container = args.container ?: '*'
+  String repoName = vars.REPO_NAME
+  String sanitizedBranch = vars.SANITIZED_BRANCH
 
   // Input validation to prevent command injection
   // Note: Basic validation is done via shell quoting below
@@ -44,6 +46,8 @@ def call(Map args = [:]) {
       IMAGE=\$(printf '%q' "${image}")
       TAG=\$(printf '%q' "${tag}")
       NAMESPACE=\$(printf '%q' "${namespace}")
+      REPO_NAME=\$(printf '%q' "${repoName}")
+      SANITIZED_BRANCH=\$(printf '%q' "${sanitizedBranch}")
 
       # Handle container wildcard specially
       if [ "${container}" = "*" ]; then
@@ -52,12 +56,22 @@ def call(Map args = [:]) {
         CONTAINER=\$(printf '%q' "${container}")
       fi
 
-      echo "[INFO] k8sSetImage: Updating deployment '\${DEPLOYMENT}' in namespace '\${NAMESPACE}'"
-      echo "[INFO] k8sSetImage: Setting image to '\${IMAGE}:\${TAG}' for container '\${CONTAINER}'"
+      SELECTOR="ci.hyratek.io/repository=\${REPO_NAME},ci.hyratek.io/branch=\${SANITIZED_BRANCH}"
+      MATCHED_DEPLOYMENTS=\$(kubectl get deployment -n "\${NAMESPACE}" -l "\${SELECTOR}" -o name)
 
-      kubectl set image deployment/"\${DEPLOYMENT}" \${CONTAINER}="\${IMAGE}:\${TAG}" -n "\${NAMESPACE}"
-
-      echo "[SUCCESS] k8sSetImage: Updated deployment '\${DEPLOYMENT}' with image '\${IMAGE}:\${TAG}'"
+      if [ -n "\${MATCHED_DEPLOYMENTS}" ]; then
+        echo "[INFO] k8sSetImage: Updating deployment(s) selected by '\${SELECTOR}' in namespace '\${NAMESPACE}'"
+        while IFS= read -r resource; do
+          [ -n "\${resource}" ] || continue
+          echo "[INFO] k8sSetImage: Updating '\${resource}' to '\${IMAGE}:\${TAG}'"
+          kubectl set image "\${resource}" \${CONTAINER}="\${IMAGE}:\${TAG}" -n "\${NAMESPACE}"
+        done <<< "\${MATCHED_DEPLOYMENTS}"
+        echo "[SUCCESS] k8sSetImage: Updated all deployments selected by '\${SELECTOR}'"
+      else
+        echo "[INFO] k8sSetImage: No labeled deployments found; using exact deployment '\${DEPLOYMENT}'"
+        kubectl set image deployment/"\${DEPLOYMENT}" \${CONTAINER}="\${IMAGE}:\${TAG}" -n "\${NAMESPACE}"
+        echo "[SUCCESS] k8sSetImage: Updated deployment '\${DEPLOYMENT}' with image '\${IMAGE}:\${TAG}'"
+      fi
     """
   )
 }
