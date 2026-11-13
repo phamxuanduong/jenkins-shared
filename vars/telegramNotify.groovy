@@ -16,10 +16,6 @@
  * @return void
  */
 def call(Map args = [:]) {
-  // TEMP MUTE (2026-11-13): PHP2Shell rebuilds in progress — revert this commit to re-enable
-  echo "[INFO] telegramNotify: temporarily muted, skipping notification"
-  return
-
   // Check for deployment blocked to prevent infinite loops in post actions
   if (env.DEPLOYMENT_BLOCKED == 'true' && !args.vars) {
     echo "[WARN] telegramNotify: Deployment already blocked, skipping notification to prevent infinite loop"
