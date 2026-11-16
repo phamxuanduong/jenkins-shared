@@ -16,10 +16,6 @@
  * @return void
  */
 def call(Map args = [:]) {
-  // TEMP MUTE (2026-11-16): chuan hoa env + build lai hyra-network-landing-page — revert commit nay de bat lai
-  echo "[INFO] telegramNotify: temporarily muted, skipping notification"
-  return
-
   // Check for deployment blocked to prevent infinite loops in post actions
   if (env.DEPLOYMENT_BLOCKED == 'true' && !args.vars) {
     echo "[WARN] telegramNotify: Deployment already blocked, skipping notification to prevent infinite loop"
